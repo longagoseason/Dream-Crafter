@@ -1,8 +1,8 @@
 item_id,item_name,skill_id,effect,target,cooldown,effect_value_min,effect_value_max,buy_level,buy_gold,sell_gold
-item101,治癒藥草,,HPrecover,self,1,20,40,1,100,10
-item201,魔力藥草,,MPrecover,self,1,20,40,1,100,10
-item102,Lv.1 生命藥水,,HPrecover,self,2,40,60,5,300,30
-item202,Lv.1 魔力藥水,,MPrecover,self,2,40,60,5,300,30
+item101,治癒藥草,,HPrecover,self,1,20,30,1,100,10
+item201,魔力藥草,,MPrecover,self,5,20,30,1,100,10
+item102,Lv.1 生命藥水,,HPrecover,self,2,30,50,8,300,30
+item202,Lv.1 魔力藥水,,MPrecover,self,5,30,50,8,300,30
 sp0101,Lv.1 祝福石,,Bless_Enhance,equipment,,0,0,1,5000,
 sp0201,Lv.1 詛咒石,,Curse_Enhance,equipment,,0,0,1,5000,
 sp0102,Lv.2 祝福石,,Bless_Enhance,equipment,,0,5,,,
