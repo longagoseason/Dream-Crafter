@@ -1,0 +1,3365 @@
+"use strict";
+
+const TICK_MS = 100;
+const INVENTORY_PAGE_SIZE = 36;
+const { combatStat, luckyRollCount, rollLuckyDamage, rollCritical, rollAttackAvoidance, mitigate, calculateAttackDamage, calculateHeal } = BattleService;
+const ATTRIBUTE_KEYS = ["STR", "CON", "INT", "WIS", "DEX", "LUK"];
+const DERIVED_STAT_KEYS = ["ATK", "MATK", "CRI", "CRI_DMG", "AC", "MR", "AAR", "SAR", "HP", "HPR", "MP", "MPR", "ADAM", "MDAM"];
+const EQUIPMENT_SLOTS = [
+  { key: "necklace_1", positions: ["necklace"] }, { key: "earrings_1", positions: ["earrings"] },
+  { key: "helmet_1", positions: ["helmet"] }, { key: "earrings_2", positions: ["earrings"] },
+  { key: "weapon_1", positions: ["physical_weapon", "magic_weapon"] }, { key: "body_1", positions: ["body"] },
+  { key: "shield_1", positions: ["shield"] }, { key: "ring_1", positions: ["ring"] },
+  { key: "ring_2", positions: ["ring"] }, { key: "kneepads_1", positions: ["kneepads"] },
+  { key: "ring_3", positions: ["ring"] }, { key: "ring_4", positions: ["ring"] },
+  { key: "idol_1", positions: ["idol"] }, { key: "bracers_1", positions: ["bracers"] },
+  { key: "shoe_1", positions: ["shoe"] }, { key: "bracers_2", positions: ["bracers"] }, { key: "core_1", positions: ["core"] },
+];
+
+const state = {
+  data: null, map: null, previousMapId: null, roster: [], party: [], enemies: [], gold: 0, drops: [], inventory: [], inventoryPage: 0,
+  equipmentCharacter: "A", equipmentEditSets: {}, infoCharacter: "A", attributeCharacter: "A", skillCharacter: "A", enhanceCharacter: "A", enhanceEquipmentSet: 1, enhanceEquipmentSlot: null,
+  enhanceSelectedAttribute: null, enhanceSelectedType: "bless", enhanceStoneKeys: { bless: null, curse: null, chaos: null }, enhanceReturnStoneKey: null, enhanceOperation: null, shopMode: "buy", rightPage: "battle", battleLogChannel: "all", elapsed: 0, spawnElapsed: 0, paused: false, lastTime: 0, savePending: false,
+  savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(),
+};
+const equipmentTooltipModels = new WeakMap();
+const enhancementFlashKeyframes = new Set();
+const BULK_SHOP_EFFECTS = new Set(["HPrecover", "MPrecover", "Return_Enhance", "Chaos_Enhance", "Bless_Enhance", "Curse_Enhance"]);
+const $ = (selector) => document.querySelector(selector);
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+const round = (n) => Math.max(0, Math.round(n * 10) / 10);
+const roundStat = (n) => Math.round(n * 10) / 10;
+// Keep resource changes precise between frames. Display formatting is handled separately;
+// rounding to one decimal here would erase small rates such as 0.1 HPR/MPR.
+const roundSigned = (n) => Math.round(n * 1000000) / 1000000;
+const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+async function init() {
+  try {
+    if (!globalThis.DreamerRuntime || !globalThis.DreamerSaveManager) throw new Error("runtimePlatform.js 或 saveManager.js 尚未載入");
+    const runtimeMode = await DreamerRuntime.initialize();
+    await DreamerSaveManager.initialize(runtimeMode);
+    const [gameData, saved] = await Promise.all([DreamerRuntime.loadGameData(), DreamerSaveManager.loadGame()]);
+    state.data = gameData;
+    validateGameData(state.data);
+    document.title = String(systemSettings().Homepage_title || document.title);
+    applyCsvColorTheme();
+    buildInventoryGrid();
+    setupInventoryPages();
+    buildParty();
+    const saveLoaded = applyPlayerSave(saved);
+    if (!saveLoaded) grantInitialItems();
+    setupEquipmentTooltip();
+    setupEquipmentPanel();
+    setupCharacterInfoPanel();
+    setupAttributePanel();
+    setupSkillPanel();
+    setupRecoveryPanel();
+    setupSaveManagerPanel();
+    setupWelcomePanel();
+    setupRightPanel();
+    setupShop();
+    setupEnhancePanel();
+    buildMapSelect();
+    const firstBattleMap = state.data.map.find((map) => map.map_id !== "town001" && map.max_monsters > 0);
+    const restoredCurrentMap = state.data.map.find((map) => map.map_id === state.savedMapId);
+    const restoredMap = state.data.map.find((map) => map.map_id === state.previousMapId && map.max_monsters > 0);
+    if (!firstBattleMap) throw new Error("map.csv 沒有可進入的戰鬥地圖");
+    chooseMap((restoredCurrentMap ?? restoredMap ?? firstBattleMap).map_id, state.townAutoReturn);
+    openWelcomePanel();
+    $("#pause-button").addEventListener("click", togglePause);
+    $("#save-status").textContent = `${saveLoaded ? "進度已載入" : "新存檔"} · ${DreamerSaveManager.storageMode === "indexeddb" ? "瀏覽器存檔" : "本機 JSON"}`;
+    setInterval(persistPlayerSave, 5000);
+    window.addEventListener("beforeunload", () => persistPlayerSave(true));
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") persistPlayerSave(true); });
+    state.lastTime = performance.now();
+    requestAnimationFrame(loop);
+  } catch (error) {
+    $("#status").textContent = "資料載入失敗";
+    addLog(`無法載入遊戲資料：${error.message}。資料來源：${globalThis.DreamerRuntime?.dataSource ?? "尚未判定"}。`);
+  }
+}
+
+function exportPlayerSave() {
+  return {
+    version: 1,
+    saveVersion: 1,
+    gameVersion: globalThis.DreamerSaveManager?.GAME_VERSION ?? "0.1.0",
+    teamName: state.teamName,
+    gold: state.gold,
+    inventory: state.inventory,
+    autoSellItemIds: [...state.autoSellItemIds],
+    currentMapId: state.map?.map_id ?? null,
+    townAutoReturn: state.map?.map_id === "town001" && state.townAutoReturn,
+    previousMapId: state.map?.map_id === "town001" ? state.previousMapId : state.map?.map_id,
+    roster: state.roster.map((hero) => ({
+      classId: hero.classId, slot: hero.slot, level: hero.level, exp: hero.exp, attributes: hero.attributes,
+      customName: hero.customName,
+      equipment: hero.equipmentSets["1"], equipmentSets: hero.equipmentSets, activeEquipmentSet: hero.activeEquipmentSet,
+      levelPlan: hero.levelPlan, growthStats: hero.growthStats,
+      hp: hero.hp, mp: hero.mp, learnedSkillIds: [...hero.learnedSkillIds], skillEnabled: hero.skillEnabled,
+      skillSettings: hero.skillSettings,
+      recoverySettings: hero.recoverySettings,
+      itemCooldowns: hero.itemCooldowns, resetAvailableAt: hero.resetAvailableAt,
+    })),
+  };
+}
+
+function applyPlayerSave(saved) {
+  if (!saved || Number(saved.saveVersion ?? saved.version) !== 1 || !Array.isArray(saved.roster)) return false;
+  const savedByClass = new Map(saved.roster.map((hero) => [hero.classId, hero]));
+  const knownClassIds = new Set(state.roster.map((hero) => hero.classId));
+  const partySlots = saved.roster.filter((hero) => knownClassIds.has(hero.classId)).map((hero) => hero.slot).filter(Boolean);
+  if (partySlots.length !== 3 || new Set(partySlots).size !== 3 || !partySlots.every((slot) => ["A", "B", "C"].includes(slot))) return false;
+
+  for (const hero of state.roster) {
+    const source = savedByClass.get(hero.classId);
+    if (!source) continue;
+    hero.customName = normalizeCharacterName(source.customName);
+    hero.name = hero.customName || hero.className;
+    hero.slot = source.slot ?? null;
+    hero.id = hero.slot ?? hero.classId;
+    hero.level = clamp(Math.trunc(Number(source.level) || 1), 1, 100);
+    hero.exp = Math.max(0, Number(source.exp) || 0);
+    hero.attributes = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, Math.max(0, Number(source.attributes?.[key]) || 0)]));
+    initializeEquipmentSets(hero, source.equipmentSets ?? { "1": source.equipment ?? {}, "2": {} }, source.activeEquipmentSet);
+    hero.levelPlan = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, clamp(Math.trunc(Number(source.levelPlan?.[key]) || 0), 0, 5)]));
+    hero.growthStats = Object.fromEntries(DERIVED_STAT_KEYS.map((key) => [key, Math.max(0, Number(source.growthStats?.[key] ?? (key === "HP" ? source.hpGrowth : key === "MP" ? source.mpGrowth : 0)) || 0)]));
+    hero.learnedSkillIds = new Set((source.learnedSkillIds ?? []).filter((skillId) => state.data.characterSkills.some((skill) => skill.skill_id === skillId && skill.class_id === hero.classId)));
+    hero.skillEnabled = { ...(source.skillEnabled ?? {}) };
+    hero.skillSettings = Object.fromEntries(Object.entries(source.skillSettings ?? {}).filter(([skillId]) => state.data.characterSkills.some((skill) => skill.skill_id === skillId && skill.class_id === hero.classId)));
+    grantBuiltInSkills(hero);
+    const legacyAutoRecovery = source.autoRecoveryEnabled !== false;
+    hero.recoverySettings = {
+      hpEnabled: source.recoverySettings?.hpEnabled ?? legacyAutoRecovery,
+      hpPercent: clamp(Number(source.recoverySettings?.hpPercent ?? 20), 1, 100),
+      hpItemId: source.recoverySettings?.hpItemId ?? null,
+      mpEnabled: source.recoverySettings?.mpEnabled ?? legacyAutoRecovery,
+      mpPercent: clamp(Number(source.recoverySettings?.mpPercent ?? 20), 1, 100),
+      mpItemId: source.recoverySettings?.mpItemId ?? null,
+    };
+    hero.itemCooldowns = Object.fromEntries(Object.entries(source.itemCooldowns ?? {}).map(([key, value]) => [key, Math.max(0, Number(value) || 0)]));
+    hero.resetAvailableAt = Math.max(0, Number(source.resetAvailableAt) || 0);
+    recalculateHeroStats(hero, true);
+    hero.hp = clamp(Number(source.hp) || 0, 0, hero.maxHp);
+    hero.mp = clamp(Number(source.mp) || 0, 0, hero.maxMp);
+  }
+  state.party = ["A", "B", "C"].map((slot) => state.roster.find((hero) => hero.slot === slot));
+  state.gold = Math.max(0, Math.trunc(Number(saved.gold) || 0));
+  state.teamName = normalizeTeamName(saved.teamName);
+  state.inventory = (saved.inventory ?? [])
+    .filter((entry) => state.data.item.some((item) => item.item_id === entry.itemId) || state.data.equipment.some((item) => item.item_id === entry.itemId))
+    .map((entry) => state.data.equipment.some((item) => item.item_id === entry.itemId)
+      ? { ...normalizeEquipmentInstance(entry), name: entry.name, quantity: 1, isEquipment: true }
+      : { ...entry, key: entry.key || entry.itemId, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), isEquipment: false });
+  state.autoSellItemIds = new Set((saved.autoSellItemIds ?? []).filter((itemId) => catalogItem(itemId)));
+  ensureUniqueEquipmentUuids();
+  state.savedMapId = saved.currentMapId ?? null;
+  state.townAutoReturn = Boolean(saved.townAutoReturn);
+  state.previousMapId = saved.previousMapId ?? null;
+  updateCharacterControls();
+  return true;
+}
+
+async function persistPlayerSave(keepalive = false) {
+  if (!state.data || state.savePending || !globalThis.DreamerSaveManager) return;
+  state.savePending = true;
+  try {
+    await DreamerSaveManager.saveGame(exportPlayerSave(), { keepalive });
+    if ($("#save-status")) $("#save-status").textContent = "進度已儲存";
+  } catch (error) {
+    if ($("#save-status")) $("#save-status").textContent = `存檔失敗：${error.message}`;
+  } finally { state.savePending = false; }
+}
+
+function validateGameData(data) {
+  const requiredTables = [
+    "classes", "equipment", "item", "characterAttribute", "attributeIndex", "characterSkills", "monsters", "monsterSkills", "skill",
+    "map", "mapSpawn", "lootDrops", "specialLoot", "playerLevel", "dreamerSystem", "gameColorIndex", "enhanceLevel", "enhanceSaveEnchant", "enhanceOverEnchant", "enhanceChaosEnchant", "welcomeNews",
+  ];
+  const missing = requiredTables.filter((key) => !Array.isArray(data?.[key]));
+  if (missing.length) throw new Error(`資料版本不相容，缺少資料表：${missing.join("、")}`);
+}
+
+function csvColor(value, fallback = "#ededed") {
+  return /^#[0-9A-Fa-f]{6}$/.test(String(value ?? "")) ? String(value) : fallback;
+}
+
+const LEGACY_COLOR_LOCATIONS = {
+  player_name: "right_player_name", monster_normal: "right_monster_normal", monster_boss: "right_monster_boss",
+  critical_hit: "right_critical_hit", dodge: "right_dodge", Mirror_color: "left_Mirror_color",
+};
+
+function indexedColor(location, fallback = "#ededed") {
+  const row = state.data?.gameColorIndex?.find((entry) => entry.color_location === location);
+  return csvColor(row?.color_name, fallback);
+}
+
+function gameColor(field, fallback = "#ededed") {
+  return indexedColor(LEGACY_COLOR_LOCATIONS[field] ?? field, fallback);
+}
+
+function applyCsvColorTheme() {
+  const rootStyle = document.documentElement?.style;
+  if (!rootStyle?.setProperty) return;
+  for (const row of state.data?.gameColorIndex ?? []) {
+    const variable = `--color-${String(row.color_location).replaceAll("_", "-").toLowerCase()}`;
+    rootStyle.setProperty(variable, csvColor(row.color_name));
+  }
+  const enhanceAccent = [...(state.data?.enhanceLevel ?? [])].sort((a, b) => a.enhance_level - b.enhance_level)[0]?.enhance_color;
+  rootStyle.setProperty("--enhance-ui-accent", csvColor(enhanceAccent, "#ededed"));
+}
+
+function playerSkillLogColor(skill) {
+  return csvColor(skill?.skill_color, "#ededed");
+}
+
+function systemSettings() {
+  return state.data.dreamerSystem[0];
+}
+
+function multipliedGoldReward(baseGold) {
+  const settings = systemSettings();
+  const multiplier = Number(settings.gold_multiplier ?? settings.money_multiplier ?? 1);
+  return Math.max(0, Math.round(Number(baseGold) * multiplier));
+}
+
+function multipliedExperienceReward(penalizedExperience) {
+  return Math.max(0, Math.round(Number(penalizedExperience) * systemSettings().exp_multiplier));
+}
+
+function calculatedItemDropRate(baseDropRate, totalLuck, levelDifference) {
+  const multipliedBaseRate = Math.min(100, Number(baseDropRate) * systemSettings().item_drop_rate);
+  const luckyRate = Math.min(100, multipliedBaseRate * (1 + Math.max(0, totalLuck) / 100));
+  return Math.min(100, Math.max(multipliedBaseRate * .2, luckyRate * (1 - (Math.max(levelDifference, 3) - 3) * .1)));
+}
+
+function setupEquipmentPanel() {
+  for (const button of document.querySelectorAll(".character-tabs button")) {
+    button.addEventListener("click", () => showEquipment(button.dataset.character));
+  }
+  for (const cell of document.querySelectorAll("#equipment-grid [data-slot]")) {
+    cell.addEventListener("click", () => unequipItem(state.equipmentCharacter, cell.dataset.slot));
+  }
+  for (const button of document.querySelectorAll("[data-equipment-set]")) {
+    button.addEventListener("click", () => {
+      const hero = state.party.find((member) => member.slot === state.equipmentCharacter);
+      if (!hero) return;
+      state.equipmentEditSets[hero.classId] = equipmentSetNumber(button.dataset.equipmentSet);
+      showEquipment(hero.slot);
+    });
+  }
+  for (const input of document.querySelectorAll("[data-active-equipment-set]")) {
+    input.addEventListener("change", () => {
+      const hero = state.party.find((member) => member.slot === state.equipmentCharacter);
+      if (hero) switchActiveEquipmentSet(hero, input.dataset.activeEquipmentSet);
+    });
+  }
+  showEquipment("A");
+}
+
+function switchActiveEquipmentSet(hero, setNumber) {
+  const nextSet = equipmentSetNumber(setNumber);
+  hero.activeEquipmentSet = nextSet;
+  recalculateHeroStats(hero);
+  showEquipment(hero.slot);
+  render();
+  if ($("#character-info-dialog")?.open) renderCharacterInfoPanel();
+  if ($("#attribute-dialog")?.open) renderAttributePanel();
+  if ($("#enhance-dialog")?.open) renderEnhancePanel();
+  persistPlayerSave();
+  return nextSet;
+}
+
+function showEquipment(slot) {
+  const hero = state.party.find((member) => member.slot === slot);
+  if (!hero) return;
+  state.equipmentCharacter = slot;
+  document.querySelectorAll(".character-tabs button").forEach((button) => button.classList.toggle("active", button.dataset.character === slot));
+  const editSet = editedEquipmentSet(hero);
+  const resolvedEquipment = resolvedEquipmentForSet(hero, editSet);
+  for (const row of document.querySelectorAll("[data-set-row]")) {
+    const setNumber = equipmentSetNumber(row.dataset.setRow);
+    row.querySelector(".equipment-set-class").textContent = hero.className;
+    row.querySelector("[data-equipment-set]").classList.toggle("editing", setNumber === editSet);
+    row.querySelector("[data-active-equipment-set]").checked = setNumber === hero.activeEquipmentSet;
+  }
+  for (const cell of $("#equipment-grid").children) {
+    if (!cell.dataset.slot) continue;
+    const source = resolvedEquipment[cell.dataset.slot];
+    const equipped = source?.instance;
+    const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
+    const positions = cell.dataset.position.split(",");
+    cell.classList.toggle("equipped", Boolean(item));
+    cell.classList.toggle("mirror-equipment", Boolean(item && source.isMirror));
+    cell.style.setProperty("--mirror-color", indexedColor("left_Mirror_color"));
+    cell.textContent = item ? equipmentButtonText(item, equipped) : equipmentSlotLabel(positions[0]);
+    applyEnhancementVisual(cell, equipped);
+    assignEquipmentTooltip(cell, item, source?.isMirror ? `鏡像自 Set ${source.sourceSet}` : "點擊卸下", equipped);
+    if (!item) cell.title = "尚未裝備";
+    cell.setAttribute("aria-label", item
+      ? source.isMirror ? `Set ${editSet} 鏡像 ${equipmentDisplayName(item, equipped)}` : `卸下 Set ${editSet} 的 ${equipmentDisplayName(item, equipped)}`
+      : `Set ${editSet} 空的${equipmentSlotLabel(positions[0])}欄位`);
+  }
+}
+
+function emptyEnhancement() {
+  return { level: 0, blessCount: 0, curseCount: 0, chaosCount: 0, returnCount: 0, safeBonus: {}, blessBonus: {}, curseBonus: {}, chaosBonus: {}, history: [] };
+}
+
+function normalizeEnhancement(source = {}) {
+  source = source || {};
+  const enhancement = source.enhancement ?? source;
+  const cleanBonus = (value) => Object.fromEntries(Object.entries(value ?? {}).filter(([key, amount]) => [...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS].includes(key) && Number.isFinite(Number(amount))).map(([key, amount]) => [key, Number(amount)]));
+  return {
+    level: Math.max(0, Math.trunc(Number(enhancement.level ?? enhancement.enhance_level) || 0)),
+    blessCount: Math.max(0, Math.trunc(Number(enhancement.blessCount ?? enhancement.bless_count) || 0)),
+    curseCount: Math.max(0, Math.trunc(Number(enhancement.curseCount ?? enhancement.curse_count) || 0)),
+    chaosCount: Math.max(0, Math.trunc(Number(enhancement.chaosCount ?? enhancement.chaos_count) || 0)),
+    returnCount: Math.max(0, Math.trunc(Number(enhancement.returnCount ?? enhancement.return_count) || 0)),
+    safeBonus: cleanBonus(enhancement.safeBonus ?? enhancement.safe_bonus),
+    blessBonus: cleanBonus(enhancement.blessBonus ?? enhancement.bless_bonus),
+    curseBonus: cleanBonus(enhancement.curseBonus ?? enhancement.curse_bonus),
+    chaosBonus: cleanBonus(enhancement.chaosBonus ?? enhancement.chaos_bonus),
+    history: Array.isArray(enhancement.history ?? enhancement.enhance_history)
+      ? (enhancement.history ?? enhancement.enhance_history).map((entry) => ({ ...entry, results: entry.results ? { ...entry.results } : undefined }))
+      : [],
+  };
+}
+
+function normalizeEquipmentInstance(source = {}) {
+  const itemUuid = source.itemUuid || source.item_uuid || source.key || crypto.randomUUID();
+  return { key: itemUuid, itemUuid, itemId: source.itemId ?? source.item_id, locked: Boolean(source.locked), enhancement: normalizeEnhancement(source) };
+}
+
+function equipmentSetNumber(value) {
+  return Number(value) === 2 ? 2 : 1;
+}
+
+function normalizeEquipmentMap(source = {}) {
+  return Object.fromEntries(Object.entries(source ?? {})
+    .filter(([slot, equipped]) => EQUIPMENT_SLOTS.some((candidate) => candidate.key === slot)
+      && state.data.equipment.some((item) => item.item_id === equipped?.itemId))
+    .map(([slot, equipped]) => [slot, normalizeEquipmentInstance(equipped)]));
+}
+
+function initializeEquipmentSets(hero, source = {}, activeSet = 1) {
+  hero.equipmentSets = {
+    "1": normalizeEquipmentMap(source["1"] ?? source.set1 ?? {}),
+    "2": normalizeEquipmentMap(source["2"] ?? source.set2 ?? {}),
+  };
+  hero.activeEquipmentSet = equipmentSetNumber(activeSet);
+  const descriptor = Object.getOwnPropertyDescriptor(hero, "equipment");
+  if (!descriptor?.get) {
+    Object.defineProperty(hero, "equipment", {
+      configurable: true,
+      enumerable: false,
+      get() { return this.equipmentSets[String(this.activeEquipmentSet)] ?? {}; },
+      set(value) { this.equipmentSets[String(this.activeEquipmentSet)] = value ?? {}; },
+    });
+  }
+}
+
+function equipmentConfig(hero, setNumber = hero?.activeEquipmentSet) {
+  return hero?.equipmentSets?.[String(equipmentSetNumber(setNumber))] ?? {};
+}
+
+function editedEquipmentSet(hero) {
+  return equipmentSetNumber(state.equipmentEditSets[hero.classId] ?? hero.activeEquipmentSet);
+}
+
+function resolvedEquipmentForSet(hero, setNumber = hero?.activeEquipmentSet) {
+  const selectedSet = equipmentSetNumber(setNumber);
+  const otherSet = selectedSet === 1 ? 2 : 1;
+  const selected = equipmentConfig(hero, selectedSet);
+  const other = equipmentConfig(hero, otherSet);
+  const resolved = {};
+  for (const { key } of EQUIPMENT_SLOTS) {
+    if (selected[key]) resolved[key] = { instance: selected[key], sourceSet: selectedSet, isMirror: false };
+    else if (other[key]) resolved[key] = { instance: other[key], sourceSet: otherSet, isMirror: true };
+  }
+  const weapon = resolved.weapon_1?.instance
+    ? state.data.equipment.find((item) => item.item_id === resolved.weapon_1.instance.itemId)
+    : null;
+  if (weapon?.weapon_type === "two_hand_weapon" && resolved.shield_1) {
+    if (selected.shield_1 && !selected.weapon_1) delete resolved.weapon_1;
+    else delete resolved.shield_1;
+  }
+  return resolved;
+}
+
+function equipmentSlotSource(hero, slot, setNumber = hero?.activeEquipmentSet) {
+  return resolvedEquipmentForSet(hero, setNumber)[slot] ?? null;
+}
+
+function ensureUniqueEquipmentUuids() {
+  const used = new Set();
+  const equipmentInstances = [
+    ...state.roster.flatMap((hero) => Object.values(hero.equipmentSets ?? {}).flatMap((equipmentSet) => Object.values(equipmentSet ?? {}))),
+    ...state.inventory.filter((entry) => entry.isEquipment),
+  ];
+  for (const instance of equipmentInstances) {
+    let itemUuid = instance.itemUuid || instance.key || crypto.randomUUID();
+    if (used.has(itemUuid)) itemUuid = crypto.randomUUID();
+    instance.itemUuid = itemUuid;
+    instance.key = itemUuid;
+    instance.enhancement = normalizeEnhancement(instance);
+    used.add(itemUuid);
+  }
+}
+
+function enhancementBonus(instance) {
+  const enhancement = normalizeEnhancement(instance);
+  return [...Object.entries(enhancement.safeBonus), ...Object.entries(enhancement.blessBonus), ...Object.entries(enhancement.curseBonus), ...Object.entries(enhancement.chaosBonus)]
+    .reduce((result, [key, value]) => ({ ...result, [key]: (result[key] ?? 0) + Number(value) }), {});
+}
+
+function equipmentDisplayName(item, instance) {
+  const level = normalizeEnhancement(instance).level;
+  return `${level > 0 ? `+${level} ` : ""}${item.item_name}`;
+}
+
+function enhancementLevelSetting(instance) {
+  return state.data?.enhanceLevel?.find((row) => row.enhance_level === normalizeEnhancement(instance).level);
+}
+
+function equipmentButtonText(item, instance) {
+  const lines = [];
+  const enhanceLevel = normalizeEnhancement(instance).level;
+  if (enhanceLevel > 0) lines.push(`+${enhanceLevel}`);
+  const name = String(item?.item_name ?? instance?.name ?? instance?.itemId ?? "").trim();
+  const itemLevelName = /^(Lv\.\d+(?:\.\d+)?)\s+(.+)$/.exec(name);
+  if (itemLevelName) {
+    lines.push(itemLevelName[1]);
+    lines.push(...itemLevelName[2].trim().split(/\s+/).filter(Boolean));
+  } else {
+    lines.push(...name.split(/\s+/).filter(Boolean));
+  }
+  return lines.join("\n");
+}
+
+function darkenHexColor(color, factor = .52) {
+  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(String(color ?? ""));
+  if (!match) return "#252525";
+  return `#${match.slice(1).map((part) => Math.round(parseInt(part, 16) * factor).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function enhancementStarPositions(count) {
+  const total = Math.max(0, Math.trunc(Number(count) || 0));
+  if (total <= 10) {
+    const bottomCount = Math.min(5, total);
+    const topCount = Math.max(0, total - bottomCount);
+    const line = (amount, top) => Array.from({ length: amount }, (_, index) => ({
+      left: `${((index + 1) / (amount + 1)) * 100}%`,
+      top: top ? "8%" : "92%",
+    }));
+    return [...line(bottomCount, false), ...line(topCount, true)];
+  }
+  const perimeter = 4;
+  return Array.from({ length: total }, (_, index) => {
+    const progress = index / total * perimeter;
+    if (progress < 1) return { left: `${progress * 100}%`, top: "4%" };
+    if (progress < 2) return { left: "96%", top: `${(progress - 1) * 100}%` };
+    if (progress < 3) return { left: `${(3 - progress) * 100}%`, top: "96%" };
+    return { left: "4%", top: `${(4 - progress) * 100}%` };
+  });
+}
+
+function applyEnhancementVisual(element, instance) {
+  const setting = enhancementLevelSetting(instance);
+  const levelColor = setting ? csvColor(setting.enhance_color, "#ffffff") : "#ffffff";
+  const starColor = setting ? csvColor(setting.star_color, levelColor) : "#ffffff";
+  const flashShading = setting ? csvColor(setting.flash_shading, levelColor) : "#ffffff";
+  const flashName = setting ? csvColor(setting.flash_name, levelColor) : "#ffffff";
+  element.style.color = setting ? levelColor : "";
+  element.style.whiteSpace = "pre-line";
+  element.classList?.toggle("enhancement-visual", Boolean(setting));
+  const flashDelay = Math.max(0, Number(setting?.is_flashing) || 0);
+  element.classList?.toggle("enhancement-flash", Boolean(setting && flashDelay > 0));
+  const starCount = Math.max(0, Math.trunc(Number(setting?.star_count) || 0));
+  element.classList?.toggle("has-enhancement-stars", starCount > 0);
+  if (element.style.setProperty) {
+    element.style.setProperty("--enhance-color", levelColor);
+    element.style.setProperty("--enhance-star-color", starColor);
+    if (setting && flashDelay > 0) {
+      const animationName = ensureEnhancementFlashKeyframes(flashDelay);
+      element.style.setProperty("--enhance-flash-name", animationName);
+      element.style.setProperty("--enhance-flash-duration", `${flashDelay + 15}s`);
+      element.style.setProperty("--enhance-flash-base-bg", element.classList?.contains?.("mirror-equipment") ? "var(--mirror-color)" : "var(--color-left-equipment-filled-background)");
+      element.style.setProperty("--enhance-flash-base-name", levelColor);
+      element.style.setProperty("--enhance-flash-shading", flashShading);
+      element.style.setProperty("--enhance-flash-name-color", flashName);
+    }
+  }
+  if (!setting || typeof element.replaceChildren !== "function" || typeof document?.createElement !== "function") return;
+  const label = document.createElement("span");
+  label.className = "equipment-label";
+  label.textContent = element.textContent;
+  if (!starCount) {
+    element.replaceChildren(label);
+    return;
+  }
+  const stars = document.createElement("span");
+  stars.className = "enhancement-stars-layer";
+  stars.setAttribute("aria-hidden", "true");
+  for (const position of enhancementStarPositions(starCount)) {
+    const star = document.createElement("span");
+    star.className = "enhancement-star";
+    star.textContent = "★";
+    star.style.left = position.left;
+    star.style.top = position.top;
+    stars.append(star);
+  }
+  element.replaceChildren(label, stars);
+}
+
+function ensureEnhancementFlashKeyframes(waitSeconds) {
+  const wait = Math.max(0, Number(waitSeconds) || 0);
+  const key = Math.round(wait * 1000);
+  const name = `enhance-flash-${key}`;
+  if (enhancementFlashKeyframes.has(name)) return name;
+  enhancementFlashKeyframes.add(name);
+  const total = wait + 15;
+  const waitPercent = wait / total * 100;
+  const fadeInPercent = (wait + 5) / total * 100;
+  const holdPercent = (wait + 10) / total * 100;
+  if (typeof document !== "undefined" && document.head?.append) {
+    const style = document.createElement("style");
+    style.dataset.enhancementFlash = name;
+    style.textContent = `@keyframes ${name}{0%,${waitPercent}%{background-color:var(--enhance-flash-base-bg);color:var(--enhance-flash-base-name)}${fadeInPercent}%,${holdPercent}%{background-color:var(--enhance-flash-shading);color:var(--enhance-flash-name-color)}100%{background-color:var(--enhance-flash-base-bg);color:var(--enhance-flash-base-name)}}`;
+    document.head.append(style);
+  }
+  return name;
+}
+
+function equipmentTooltipModel(item, action, instance = null) {
+  if (!item) return null;
+  const bonus = enhancementBonus(instance);
+  const statValue = (key) => Number(item[key] ?? 0) + Number(bonus[key] ?? 0);
+  const formatStat = (key) => {
+    const value = statValue(key);
+    return { key, value, text: `${key}${value > 0 ? "+" : ""}${formatEnhancementValue(key, value)}` };
+  };
+  const primary = DERIVED_STAT_KEYS
+    .map((key) => [key, Number(item[key] ?? 0) + Number(bonus[key] ?? 0)])
+    .filter(([, value]) => value)
+    .map(([key]) => formatStat(key));
+  const attributes = ATTRIBUTE_KEYS
+    .map((key) => formatStat(key))
+    .filter(({ value }) => value);
+  const enhancement = normalizeEnhancement(instance);
+  return {
+    title: equipmentDisplayName(item, instance),
+    itemLevel: Number(item.item_level),
+    bless: enhancement.level >= 5 ? enhancement.blessCount : null,
+    curse: enhancement.level >= 5 ? enhancement.curseCount : null,
+    chaos: enhancement.level >= 5 ? enhancement.chaosCount : null,
+    returned: enhancement.returnCount,
+    primary,
+    attributes,
+    action,
+  };
+}
+
+function equipmentTooltip(item, action, instance = null) {
+  const model = equipmentTooltipModel(item, action, instance);
+  if (!model) return "";
+  const lines = [`${model.title} | Lv.${model.itemLevel}`];
+  if (model.bless !== null || model.returned > 0) lines.push(`祝福 ${model.bless ?? 0} | 詛咒 ${model.curse ?? 0} | 混沌 ${model.chaos ?? 0} | 倒回 ${model.returned}`);
+  const rowCount = Math.max(model.primary.length, model.attributes.length);
+  for (let index = 0; index < rowCount; index++) {
+    lines.push(`${model.primary[index]?.text ?? ""} | ${model.attributes[index]?.text ?? ""}`.trimEnd());
+  }
+  if (model.action) lines.push(model.action);
+  return lines.join("\n");
+}
+
+function assignEquipmentTooltip(element, item, action, instance = null) {
+  if (!element) return;
+  if (!item) {
+    equipmentTooltipModels.delete(element);
+    delete element.dataset.equipmentTooltip;
+    return;
+  }
+  equipmentTooltipModels.set(element, equipmentTooltipModel(item, action, instance));
+  element.dataset.equipmentTooltip = "true";
+  if (typeof element.removeAttribute === "function") element.removeAttribute("title");
+  else element.title = "";
+}
+
+function renderEquipmentTooltip(popup, model) {
+  popup.replaceChildren();
+  const title = document.createElement("strong");
+  title.className = "equipment-tooltip-title";
+  const name = document.createElement("span");
+  name.textContent = model.title;
+  const level = document.createElement("span");
+  level.textContent = `Lv.${model.itemLevel}`;
+  title.append(name, level);
+  popup.append(title);
+
+  if (model.bless !== null || model.returned > 0) {
+    const headings = document.createElement("div");
+    headings.className = "equipment-tooltip-row equipment-tooltip-headings";
+    const counts = document.createElement("span");
+    counts.textContent = `祝福 ${model.bless ?? 0}　詛咒 ${model.curse ?? 0}　混沌 ${model.chaos ?? 0}　倒回 ${model.returned}`;
+    headings.append(counts);
+    popup.append(headings);
+  }
+
+  const rowCount = Math.max(model.primary.length, model.attributes.length);
+  for (let index = 0; index < rowCount; index++) {
+    const row = document.createElement("div");
+    row.className = "equipment-tooltip-row";
+    const primary = document.createElement("span");
+    primary.textContent = model.primary[index]?.text ?? "";
+    const attribute = document.createElement("span");
+    attribute.textContent = model.attributes[index]?.text ?? "";
+    row.append(primary, attribute);
+    popup.append(row);
+  }
+
+  if (model.action) {
+    const action = document.createElement("small");
+    action.className = "equipment-tooltip-action";
+    action.textContent = model.action;
+    popup.append(action);
+  }
+}
+
+function setupEquipmentTooltip() {
+  const popup = $("#equipment-tooltip");
+  if (!popup) return;
+  let activeElement = null;
+  const move = (event) => {
+    const gap = 14;
+    const width = popup.offsetWidth;
+    const height = popup.offsetHeight;
+    popup.style.left = `${Math.max(8, Math.min(event.clientX + gap, window.innerWidth - width - 8))}px`;
+    popup.style.top = `${Math.max(8, Math.min(event.clientY + gap, window.innerHeight - height - 8))}px`;
+  };
+  document.addEventListener("mouseover", (event) => {
+    const target = event.target.closest?.("[data-equipment-tooltip]");
+    const model = target ? equipmentTooltipModels.get(target) : null;
+    if (!model) return;
+    const tooltipHost = target.closest?.("#enhance-dialog") ?? document.body;
+    if (popup.parentElement !== tooltipHost) tooltipHost.append(popup);
+    activeElement = target;
+    renderEquipmentTooltip(popup, model);
+    popup.hidden = false;
+    move(event);
+  });
+  document.addEventListener("mousemove", (event) => {
+    if (activeElement) move(event);
+  });
+  document.addEventListener("mouseout", (event) => {
+    if (!activeElement || event.relatedTarget && activeElement.contains(event.relatedTarget)) return;
+    activeElement = null;
+    popup.hidden = true;
+  });
+}
+
+function itemTooltip(item) {
+  if (!item) return "";
+  const enhancementStone = enhancementStoneDisplay(item);
+  if (enhancementStone) {
+    return `${item.item_name}\n${enhancementStone.effectName} 機率提升 ${item.effect_value_min}% ~ ${item.effect_value_max}%`;
+  }
+  const lines = [item.item_name];
+  const effectNames = { HPrecover: "生命恢復", MPrecover: "魔力恢復" };
+  if (effectNames[item.effect]) lines.push(`${effectNames[item.effect]} ${item.effect_value_min}~${item.effect_value_max}`);
+  else if (item.effect === "learn_skill") lines.push(`技能書 ${item.skill_id}`);
+  else if (item.effect) lines.push(`效果 ${item.effect}`);
+  if (item.cooldown !== null && item.cooldown !== undefined) lines.push(`冷卻時間 ${item.cooldown} 秒`);
+  return lines.join("\n");
+}
+
+function equipmentSlotLabel(position) {
+  return { necklace:"項鍊", earrings:"耳環", helmet:"頭盔", physical_weapon:"武器", magic_weapon:"武器", body:"盔甲", shield:"副手", ring:"戒指", kneepads:"護膝", idol:"神像", bracers:"護腕", shoe:"鞋子", core:"核心" }[position] ?? position;
+}
+
+function buildInventoryGrid() {
+  const grid = $("#inventory-grid");
+  for (let i = 0; i < INVENTORY_PAGE_SIZE; i++) {
+    const cell = document.createElement("button"); cell.type = "button"; cell.disabled = true;
+    cell.addEventListener("click", () => useInventoryCell(i)); grid.append(cell);
+  }
+}
+
+function setupInventoryPages() {
+  for (const button of document.querySelectorAll(".inventory-pages button")) {
+    button.addEventListener("click", () => {
+      selectInventoryPage(Number(button.dataset.page));
+      renderInventory();
+    });
+  }
+}
+
+function selectInventoryPage(page) {
+  state.inventoryPage = clamp(Math.trunc(Number(page) || 0), 0, 9);
+  document.querySelectorAll(".inventory-pages button").forEach((button) => button.classList.toggle("active", Number(button.dataset.page) === state.inventoryPage));
+}
+
+function buildParty() {
+  const preferredClassIds = ["priest", "mage", "warrior"];
+  const orderedClassIds = [
+    ...preferredClassIds.filter((classId) => state.data.classes.some((cls) => cls.class_id === classId)),
+    ...state.data.classes.map((cls) => cls.class_id).filter((classId) => !preferredClassIds.includes(classId)),
+  ];
+  const assignments = ["A", "B", "C"].map((slot, index) => ({ slot, classId: orderedClassIds[index] }));
+  state.roster = state.data.classes.map((cls) => {
+    const assignment = assignments.find((row) => row.classId === cls.class_id);
+    const slot = assignment?.slot ?? null;
+    const classId = cls.class_id;
+    const attributes = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, cls[key] ?? 0]));
+    const hero = { id: slot ?? classId, slot, className: cls.class_name, customName: "", name: cls.class_name, classId, level: 1, exp: 0, attributes,
+      levelPlan: defaultLevelPlan(attributes), growthStats: Object.fromEntries(DERIVED_STAT_KEYS.map((key) => [key, 0])), hp: 0, mp: 0, cooldown: 0,
+      learnedSkillIds: new Set(), skillEnabled: {}, skillSettings: {}, skillCooldowns: {}, itemCooldowns: {}, casting: null, buffs: [],
+      recoverySettings: { hpEnabled: true, hpPercent: 20, hpItemId: null, mpEnabled: true, mpPercent: 20, mpItemId: null }, resetAvailableAt: 0 };
+    initializeEquipmentSets(hero);
+    assignInitialEquipment(hero, cls);
+    recalculateHeroStats(hero, true);
+    grantBuiltInSkills(hero);
+    return hero;
+  });
+  state.party = assignments.map(({ classId }) => state.roster.find((hero) => hero.classId === classId)).filter(Boolean);
+  if (typeof document !== "undefined") updateCharacterControls();
+}
+
+function swapPartyMember(slot, classId) {
+  const partyIndex = state.party.findIndex((hero) => hero.slot === slot);
+  const incoming = state.roster.find((hero) => hero.classId === classId);
+  if (partyIndex < 0 || !incoming || (incoming.slot && incoming.slot !== slot)) return false;
+  const outgoing = state.party[partyIndex];
+  if (incoming === outgoing) return true;
+  outgoing.slot = null;
+  outgoing.id = outgoing.classId;
+  incoming.slot = slot;
+  incoming.id = slot;
+  state.party[partyIndex] = incoming;
+  return true;
+}
+
+function changePartyMember(slot, classId) {
+  const outgoing = state.party.find((hero) => hero.slot === slot);
+  if (!outgoing || !swapPartyMember(slot, classId)) return;
+  const incoming = state.party.find((hero) => hero.slot === slot);
+  addLog(`${outgoing.name} 更換為 ${incoming.name}；HP、MP 狀態各自保留。`);
+  updateCharacterControls();
+  updateMapLocks();
+  const selectedEquipment = document.querySelector(".character-tabs button.active")?.dataset.character ?? slot;
+  showEquipment(selectedEquipment);
+  if ($("#attribute-dialog")?.open) renderAttributePanel();
+  if ($("#character-info-dialog")?.open) renderCharacterInfoPanel();
+  if ($("#skill-dialog")?.open) renderSkillPanel();
+  render();
+}
+
+function updateCharacterControls() {
+  for (const selector of [".character-tabs", "#character-info-characters", "#attribute-characters", "#skill-characters", "#enhance-characters"]) {
+    for (const button of document.querySelectorAll(`${selector} button`)) {
+      const hero = state.party.find((member) => member.slot === button.dataset.character);
+      if (!hero) continue;
+      button.textContent = selector === "#attribute-characters" ? `${hero.className} Lv.${hero.level}` : hero.className;
+    }
+  }
+}
+
+function defaultLevelPlan(attributes) {
+  const plan = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, 0]));
+  const primary = ATTRIBUTE_KEYS.reduce((best, key) => attributes[key] > attributes[best] ? key : best, ATTRIBUTE_KEYS[0]);
+  plan[primary] = 5;
+  return plan;
+}
+
+function heroGear(hero) {
+  return Object.values(resolvedEquipmentForSet(hero))
+    .map(({ instance: equipped }) => {
+      const item = state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId);
+      if (!item) return null;
+      const bonus = enhancementBonus(equipped);
+      return { ...item, ...Object.fromEntries([...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS].map((key) => [key, Number(item[key] ?? 0) + Number(bonus[key] ?? 0)])) };
+    })
+    .filter(Boolean);
+}
+
+function assignInitialEquipment(hero, cls) {
+  const equipment = equipmentConfig(hero, 1);
+  for (const itemId of [cls.initial_weapon, cls.initial_body].filter(Boolean)) {
+    const item = state.data.equipment.find((row) => row.item_id === itemId);
+    const slotKey = findEquipmentSlot(hero, item, 1);
+    if (item && slotKey) equipment[slotKey] = normalizeEquipmentInstance({ itemId });
+  }
+}
+
+function findEquipmentSlot(hero, item, setNumber = hero?.activeEquipmentSet) {
+  const equipment = equipmentConfig(hero, setNumber);
+  const compatible = EQUIPMENT_SLOTS.filter((slot) => {
+    if (slot.positions.includes(item?.EQ_position)) return true;
+    return item?.weapon_type === "martial_weapon" && slot.key === "shield_1";
+  });
+  if (item?.weapon_type === "martial_weapon") {
+    const mainWeapon = equipment.weapon_1
+      ? state.data.equipment.find((row) => row.item_id === equipment.weapon_1.itemId)
+      : null;
+    if (mainWeapon?.weapon_type === "two_hand_weapon") return "weapon_1";
+  }
+  return compatible.find((slot) => !equipment[slot.key])?.key ?? compatible[0]?.key ?? null;
+}
+
+function effectiveAttributes(hero) {
+  const gear = heroGear(hero);
+  return Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, hero.attributes[key] + gear.reduce((sum, item) => sum + (item[key] ?? 0), 0)]));
+}
+
+function equipmentStatContribution(hero, statName) {
+  if (!hero?.equipmentSets) return 0;
+  const gear = heroGear(hero);
+  const direct = gear.reduce((sum, item) => sum + Number(item[statName] ?? 0), 0);
+  const attributeDriven = state.data.characterAttribute.reduce((sum, rule) => {
+    const coefficient = Number(rule[statName]) || 0;
+    const equipmentAttribute = gear.reduce((total, item) => total + Number(item[rule.Attribute] ?? 0), 0);
+    return sum + coefficient * equipmentAttribute;
+  }, 0);
+  return roundStat(direct + attributeDriven);
+}
+
+function recalculateHeroStats(hero, refill = false) {
+  const cls = state.data.classes.find((row) => row.class_id === hero.classId);
+  const gear = heroGear(hero);
+  const stat = (name) => (cls[`base_${name}`] ?? 0) + gear.reduce((sum, item) => sum + (item[name] ?? 0), 0);
+  const attr = effectiveAttributes(hero);
+  const attributeBonus = (name) => state.data.characterAttribute.reduce((sum, rule) => sum + (Number(rule[name]) || 0) * (Number(attr[rule.Attribute]) || 0), 0);
+  const calculated = Object.fromEntries(DERIVED_STAT_KEYS.map((key) => [key, stat(key) + attributeBonus(key) + (hero.growthStats?.[key] ?? 0)]));
+  const overBonuses = Object.fromEntries(DERIVED_STAT_KEYS.map((key) => [key, 0]));
+  for (const rule of state.data.characterAttribute) {
+    if (!(rule.over_att_num > 0) || !rule.over_effect || rule.overvalue === null) continue;
+    const points = Number(attr[rule.Attribute]) || 0;
+    const occurrences = rule.Recursive ? Math.floor(points / rule.over_att_num) : (points >= rule.over_att_num ? 1 : 0);
+    if (occurrences <= 0) continue;
+    const context = { ...attr, ...calculated };
+    const formula = String(rule.overvalue).replace(/\s+/g, "");
+    const formulaMatch = formula.match(/^([A-Za-z_]+)\*(-?\d+(?:\.\d+)?)$/);
+    const perOccurrence = formulaMatch ? (Number(context[formulaMatch[1]]) || 0) * Number(formulaMatch[2]) : Number(formula);
+    overBonuses[rule.over_effect] += perOccurrence * occurrences;
+  }
+  hero.overAttributeBonuses = overBonuses;
+  for (const key of DERIVED_STAT_KEYS) hero[key] = roundStat(calculated[key] + overBonuses[key]);
+  hero.maxHp = Math.max(1, hero.HP);
+  hero.maxMp = Math.max(0, hero.MP);
+  for (const key of ATTRIBUTE_KEYS) hero[key] = attr[key];
+  hero.attackType = gear.some((item) => item.EQ_position === "magic_weapon") ? "magic" : "melee";
+  if (refill) { hero.hp = hero.maxHp; hero.mp = hero.maxMp; }
+  else { hero.hp = Math.min(hero.hp, hero.maxHp); hero.mp = Math.min(hero.mp, hero.maxMp); }
+}
+
+function setupCharacterInfoPanel() {
+  $("#character-info-button").addEventListener("click", () => {
+    state.infoCharacter = state.equipmentCharacter;
+    renderCharacterInfoPanel();
+    $("#character-info-dialog").showModal();
+  });
+  $("#character-info-close").addEventListener("click", () => $("#character-info-dialog").close());
+  for (const button of document.querySelectorAll("#character-info-characters button")) {
+    button.addEventListener("click", () => {
+      state.infoCharacter = button.dataset.character;
+      renderCharacterInfoPanel();
+    });
+  }
+}
+
+function signedStat(value, digits = null) {
+  const numeric = digits === null ? roundStat(Number(value) || 0) : Math.round((Number(value) || 0) * (10 ** digits)) / (10 ** digits);
+  const formatted = digits === null ? formatExactNumber(numeric) : numeric.toFixed(digits);
+  return `${numeric >= 0 ? "+" : ""}${formatted}`;
+}
+
+function attributeDefinition(attribute) {
+  return state.data?.attributeIndex?.find((row) => row.Attribute === attribute) ?? null;
+}
+
+function indexedAttributeLabel(attribute) {
+  const definition = attributeDefinition(attribute);
+  return definition?.name_Attribute ? `${attribute} [${definition.name_Attribute}]` : attribute;
+}
+
+function characterInfoStat(attribute, value, numericValue = null) {
+  return {
+    label: indexedAttributeLabel(attribute),
+    value,
+    valueClass: Number(numericValue) < 0 ? "negative-value" : "positive-value",
+    title: attributeDefinition(attribute)?.document_Attribute ?? "",
+  };
+}
+
+function characterInfoCells(hero) {
+  const attributes = effectiveAttributes(hero);
+  const requiredExp = requiredExpFor(hero.level);
+  return [
+    { text: hero.name, className: "header" }, { text: "", className: "header" }, { text: `Lv.${hero.level}`, className: "header right" },
+    characterInfoStat("HP", formatExactNumber(hero.hp)), characterInfoStat("MP", formatExactNumber(hero.mp)), characterInfoStat("EXP", hero.level >= 100 ? "MAX" : `${formatExactNumber(hero.exp)}/${formatCompactNumber(requiredExp ?? 0)}`),
+    characterInfoStat("ATK", signedStat(combatStat(hero, "ATK")), combatStat(hero, "ATK")), characterInfoStat("AC", signedStat(combatStat(hero, "AC")), combatStat(hero, "AC")), characterInfoStat("STR", signedStat(attributes.STR), attributes.STR),
+    characterInfoStat("MATK", signedStat(combatStat(hero, "MATK")), combatStat(hero, "MATK")), characterInfoStat("MR", signedStat(combatStat(hero, "MR")), combatStat(hero, "MR")), characterInfoStat("CON", signedStat(attributes.CON), attributes.CON),
+    characterInfoStat("ADAM", signedStat(combatStat(hero, "ADAM")), combatStat(hero, "ADAM")), characterInfoStat("HPR", signedStat(combatStat(hero, "HPR"), 1), combatStat(hero, "HPR")), characterInfoStat("INT", signedStat(attributes.INT), attributes.INT),
+    characterInfoStat("MDAM", signedStat(combatStat(hero, "MDAM")), combatStat(hero, "MDAM")), characterInfoStat("MPR", signedStat(combatStat(hero, "MPR"), 1), combatStat(hero, "MPR")), characterInfoStat("WIS", signedStat(attributes.WIS), attributes.WIS),
+    characterInfoStat("CRI", signedStat(combatStat(hero, "CRI")), combatStat(hero, "CRI")), characterInfoStat("AAR", signedStat(combatStat(hero, "AAR")), combatStat(hero, "AAR")), characterInfoStat("DEX", signedStat(attributes.DEX), attributes.DEX),
+    characterInfoStat("CRI_DMG", signedStat(combatStat(hero, "CRI_DMG")), combatStat(hero, "CRI_DMG")), characterInfoStat("SAR", signedStat(combatStat(hero, "SAR")), combatStat(hero, "SAR")), characterInfoStat("LUK", signedStat(attributes.LUK), attributes.LUK),
+  ];
+}
+
+function renderCharacterInfoPanel() {
+  const hero = state.party.find((member) => member.slot === state.infoCharacter) ?? state.party[0];
+  if (!hero) return;
+  state.infoCharacter = hero.slot;
+  document.querySelectorAll("#character-info-characters button").forEach((button) => button.classList.toggle("active", button.dataset.character === hero.slot));
+  const cells = characterInfoCells(hero);
+  const grid = $("#character-info-grid");
+  grid.replaceChildren(...cells.map((cell) => {
+    const element = document.createElement("div");
+    element.className = `character-info-cell ${cell.className ?? ""}`.trim();
+    if (cell.title) element.title = cell.title;
+    if (cell.label) {
+      const label = document.createElement("strong"); label.textContent = cell.label;
+      const value = document.createElement("span"); value.textContent = cell.value; value.className = cell.valueClass ?? "";
+      element.append(label, value);
+    } else element.textContent = cell.text;
+    return element;
+  }));
+}
+
+function setupAttributePanel() {
+  buildAttributeGrid();
+  $("#attribute-button").addEventListener("click", () => { renderAttributePanel(); $("#attribute-dialog").showModal(); });
+  $("#attribute-close").addEventListener("click", () => $("#attribute-dialog").close());
+  for (const button of document.querySelectorAll("#attribute-characters button")) {
+    button.addEventListener("click", () => { state.attributeCharacter = button.dataset.character; renderAttributePanel(); });
+  }
+  for (const input of document.querySelectorAll("[data-attribute]")) input.addEventListener("input", updateAttributeTotal);
+  $("#attribute-form").addEventListener("submit", saveAttributePlan);
+}
+
+function buildAttributeGrid() {
+  const grid = $("#attribute-grid");
+  grid.replaceChildren(...ATTRIBUTE_KEYS.map((key) => {
+    const row = document.createElement("div");
+    row.className = "attribute-plan-row";
+    const name = document.createElement("span");
+    name.className = "attribute-name";
+    const keyLabel = document.createElement("span");
+    keyLabel.textContent = `${indexedAttributeLabel(key)} + `;
+    const current = document.createElement("strong");
+    current.className = "attribute-current";
+    current.dataset.current = key;
+    name.append(keyLabel, current);
+    const inputWrap = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "number"; input.min = "0"; input.max = "5"; input.step = "1"; input.dataset.attribute = key;
+    input.setAttribute("aria-label", `${indexedAttributeLabel(key)} 未來升級配置`);
+    inputWrap.append(input);
+    const levelGain = document.createElement("strong");
+    levelGain.className = "attribute-level-gain";
+    levelGain.dataset.levelGain = key;
+    const gearBonus = document.createElement("strong");
+    gearBonus.className = "attribute-gear-bonus";
+    gearBonus.dataset.gearBonus = key;
+    row.title = attributeDefinition(key)?.document_Attribute ?? "";
+    row.append(name, inputWrap, levelGain, gearBonus);
+    return row;
+  }));
+}
+
+function renderAttributePanel() {
+  const hero = state.party.find((member) => member.slot === state.attributeCharacter);
+  if (!hero) return;
+  const current = effectiveAttributes(hero);
+  const cls = state.data.classes.find((row) => row.class_id === hero.classId);
+  const gear = heroGear(hero);
+  document.querySelectorAll("#attribute-characters button").forEach((button) => {
+    const member = state.party.find((candidate) => candidate.slot === button.dataset.character);
+    if (member) button.textContent = `${member.className} Lv.${member.level}`;
+    button.classList.toggle("active", button.dataset.character === hero.slot);
+  });
+  for (const key of ATTRIBUTE_KEYS) {
+    const gearBonus = gear.reduce((sum, item) => sum + Number(item[key] ?? 0), 0);
+    const levelGain = Number(hero.attributes[key] ?? 0) - Number(cls?.[key] ?? 0);
+    $(`[data-current="${key}"]`).textContent = formatExactNumber(current[key]);
+    $(`[data-level-gain="${key}"]`).textContent = signedStat(levelGain);
+    $(`[data-gear-bonus="${key}"]`).textContent = signedStat(gearBonus);
+    $(`[data-attribute="${key}"]`).value = hero.levelPlan[key];
+  }
+  $("#attribute-message").textContent = `${hero.name} Lv.${hero.level}：每次升級自動套用這組配置。`;
+  $("#attribute-message").classList.remove("error");
+  updateAttributeTotal();
+}
+
+function updateAttributeTotal() {
+  const total = ATTRIBUTE_KEYS.reduce((sum, key) => sum + clamp(Number($(`[data-attribute="${key}"]`).value) || 0, 0, 5), 0);
+  $("#attribute-total").textContent = `${total} / 5`;
+  return total;
+}
+
+function saveAttributePlan(event) {
+  event.preventDefault();
+  const message = $("#attribute-message");
+  if (updateAttributeTotal() !== 5) {
+    message.textContent = "配置總和必須剛好是 5 點。";
+    message.classList.add("error");
+    return;
+  }
+  const hero = state.party.find((member) => member.slot === state.attributeCharacter);
+  hero.levelPlan = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, clamp(Math.trunc(Number($(`[data-attribute="${key}"]`).value) || 0), 0, 5)]));
+  message.textContent = `${hero.name} Lv.${hero.level} 的下次升級配置已儲存。`;
+  message.classList.remove("error");
+  addLog(`${hero.name} 已更新升級屬性配置。`);
+}
+
+function setupSkillPanel() {
+  $("#skill-button").addEventListener("click", () => { renderSkillPanel(); $("#skill-dialog").showModal(); });
+  $("#skill-close").addEventListener("click", () => $("#skill-dialog").close());
+  for (const button of document.querySelectorAll("#skill-characters button")) {
+    button.addEventListener("click", () => { state.skillCharacter = button.dataset.character; renderSkillPanel(); });
+  }
+}
+
+function setupRecoveryPanel() {
+  $("#recovery-button").addEventListener("click", () => { renderRecoveryPanel(); $("#recovery-dialog").showModal(); });
+  $("#recovery-close").addEventListener("click", () => $("#recovery-dialog").close());
+  const teamNameInput = $("#team-name-input");
+  teamNameInput.value = state.teamName;
+  teamNameInput.addEventListener("input", () => {
+    const limited = [...teamNameInput.value].slice(0, 20).join("");
+    teamNameInput.value = limited;
+    state.teamName = limited;
+    $("#team-name").textContent = limited || "隊伍";
+  });
+  teamNameInput.addEventListener("change", () => {
+    state.teamName = normalizeTeamName(teamNameInput.value);
+    teamNameInput.value = state.teamName;
+    $("#team-name").textContent = state.teamName;
+    persistPlayerSave();
+  });
+}
+
+function saveSummaryData() {
+  const save = globalThis.DreamerSaveManager?.lastLoadedSave ?? exportPlayerSave();
+  const roster = Array.isArray(save?.roster) ? save.roster : [];
+  const names = roster.map((member) => {
+    const hero = state.roster.find((candidate) => candidate.classId === member.classId);
+    return member.customName || hero?.className || member.classId;
+  }).filter(Boolean);
+  return {
+    characters: names.join("、") || "—",
+    level: roster.length ? `最高 Lv.${Math.max(...roster.map((member) => Number(member.level) || 1))}` : "—",
+    savedAt: save?.savedAt ? new Date(save.savedAt).toLocaleString("zh-TW") : "尚未存檔",
+    gameVersion: save?.gameVersion ?? DreamerSaveManager.GAME_VERSION,
+    saveVersion: save?.saveVersion ?? save?.version ?? DreamerSaveManager.SAVE_VERSION,
+    storage: DreamerSaveManager.storageMode === "indexeddb" ? "瀏覽器 IndexedDB" : "本機 saves/player-save.json",
+  };
+}
+
+function renderSaveManagerPanel() {
+  const summary = saveSummaryData();
+  $("#save-summary-character").textContent = summary.characters;
+  $("#save-summary-level").textContent = summary.level;
+  $("#save-summary-time").textContent = summary.savedAt;
+  $("#save-summary-game-version").textContent = summary.gameVersion;
+  $("#save-summary-save-version").textContent = summary.saveVersion;
+  $("#save-summary-storage").textContent = summary.storage;
+}
+
+function setupSaveManagerPanel() {
+  const dialog = $("#save-manager-dialog");
+  const message = $("#save-manager-message");
+  const fileInput = $("#save-import-file");
+  $("#save-manager-button").addEventListener("click", async () => {
+    await persistPlayerSave();
+    renderSaveManagerPanel();
+    message.textContent = "";
+    message.classList.remove("error");
+    dialog.showModal();
+  });
+  $("#save-manager-close").addEventListener("click", () => dialog.close());
+  $("#save-export").addEventListener("click", async () => {
+    try {
+      await persistPlayerSave();
+      await DreamerSaveManager.exportSave(exportPlayerSave());
+      message.textContent = "完整存檔已匯出；目前遊戲進度與瀏覽器存檔沒有被清除。";
+      message.classList.remove("error");
+      renderSaveManagerPanel();
+    } catch (error) {
+      message.textContent = `匯出失敗：${error.message}`;
+      message.classList.add("error");
+    }
+  });
+  $("#save-import").addEventListener("click", () => { fileInput.value = ""; fileInput.click(); });
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      const imported = await DreamerSaveManager.importSave(file);
+      const highestLevel = Math.max(...imported.roster.map((member) => Number(member.level) || 1));
+      if (!window.confirm(`確認覆蓋目前存檔？\n匯入檔案最高角色等級：Lv.${highestLevel}\n成功後遊戲會重新整理。`)) {
+        message.textContent = "已取消匯入，目前存檔沒有變更。";
+        message.classList.remove("error");
+        return;
+      }
+      await DreamerSaveManager.saveGame(imported);
+      message.textContent = "匯入成功，正在重新整理遊戲……";
+      message.classList.remove("error");
+      window.setTimeout(() => window.location.reload(), 300);
+    } catch (error) {
+      message.textContent = `匯入失敗：${error.message}`;
+      message.classList.add("error");
+    }
+  });
+}
+
+function renderWelcomePanel() {
+  const container = $("#welcome-lines");
+  container.replaceChildren();
+  for (const row of state.data.welcomeNews) {
+    const line = document.createElement("p");
+    line.textContent = row.welcome_name;
+    line.style.color = csvColor(row.welcome_color);
+    line.style.fontSize = `${Number(row.welcome_pt)}pt`;
+    line.style.fontWeight = row.is_Bold ? "700" : "400";
+    container.append(line);
+  }
+}
+
+function openWelcomePanel() {
+  const dialog = $("#welcome-dialog");
+  renderWelcomePanel();
+  if (!dialog.open) dialog.showModal();
+}
+
+function setupWelcomePanel() {
+  $("#welcome-button").addEventListener("click", openWelcomePanel);
+  $("#welcome-close").addEventListener("click", () => $("#welcome-dialog").close());
+}
+
+function normalizeTeamName(value) {
+  const normalized = [...String(value ?? "").trim()].slice(0, 20).join("");
+  return normalized || "隊伍";
+}
+
+function normalizeCharacterName(value) {
+  return [...String(value ?? "").trim()].slice(0, 20).join("");
+}
+
+function setCharacterName(hero, value) {
+  if (!hero) return "";
+  hero.customName = normalizeCharacterName(value);
+  hero.name = hero.customName || hero.className;
+  render();
+  if ($("#character-info-dialog")?.open) renderCharacterInfoPanel();
+  persistPlayerSave();
+  return hero.customName;
+}
+
+function setupEnhancePanel() {
+  $("#anvil-button").addEventListener("click", () => {
+    state.enhanceCharacter = state.equipmentCharacter;
+    const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
+    state.enhanceEquipmentSet = equipmentSetNumber(hero?.activeEquipmentSet);
+    state.enhanceEquipmentSlot = null;
+    state.enhanceSelectedAttribute = null;
+    state.enhanceOperation = null;
+    renderEnhancePanel();
+    $("#enhance-dialog").append($("#equipment-tooltip"));
+    $("#enhance-dialog").showModal();
+  });
+  $("#enhance-close").addEventListener("click", () => {
+    $("#enhance-dialog").close();
+    $("#equipment-tooltip").hidden = true;
+    document.body.append($("#equipment-tooltip"));
+  });
+  for (const button of document.querySelectorAll("#enhance-characters button")) {
+    button.addEventListener("click", () => {
+      state.enhanceCharacter = button.dataset.character;
+      const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
+      state.enhanceEquipmentSet = equipmentSetNumber(hero?.activeEquipmentSet);
+      state.enhanceEquipmentSlot = null;
+      state.enhanceSelectedAttribute = null;
+      state.enhanceStoneKeys = { bless: null, curse: null, chaos: null };
+      state.enhanceReturnStoneKey = null;
+      state.enhanceOperation = null;
+      renderEnhancePanel();
+    });
+  }
+  for (const button of document.querySelectorAll("[data-enhance-set]")) {
+    button.addEventListener("click", () => {
+      state.enhanceEquipmentSet = equipmentSetNumber(button.dataset.enhanceSet);
+      state.enhanceEquipmentSlot = null;
+      state.enhanceSelectedAttribute = null;
+      state.enhanceStoneKeys = { bless: null, curse: null, chaos: null };
+      state.enhanceReturnStoneKey = null;
+      state.enhanceOperation = null;
+      renderEnhancePanel();
+    });
+  }
+  for (const button of document.querySelectorAll("#enhance-equipment-grid [data-slot]")) {
+    button.addEventListener("click", () => {
+      if (button.disabled) return;
+      state.enhanceEquipmentSlot = button.dataset.slot;
+      state.enhanceSelectedAttribute = null;
+      state.enhanceStoneKeys = { bless: null, curse: null, chaos: null };
+      state.enhanceReturnStoneKey = null;
+      state.enhanceOperation = null;
+      renderEnhancePanel();
+    });
+  }
+  document.querySelectorAll("[data-enhance-stone-type]").forEach((select) => select.addEventListener("change", (event) => {
+    state.enhanceStoneKeys[event.currentTarget.dataset.enhanceStoneType] = event.currentTarget.value;
+    renderEnhancePanel();
+  }));
+  document.querySelectorAll("[data-enhance-type]").forEach((button) => button.addEventListener("click", () => {
+    state.enhanceSelectedType = button.dataset.enhanceType;
+    state.enhanceOperation = button.dataset.enhanceType;
+    renderEnhancePanel();
+  }));
+  $("#enhance-return-stone").addEventListener("change", (event) => {
+    state.enhanceReturnStoneKey = event.currentTarget.value;
+    renderEnhancePanel();
+  });
+  $("#enhance-return-mode").addEventListener("click", () => {
+    state.enhanceOperation = "return";
+    renderEnhancePanel();
+  });
+  $("#enhance-return-confirm").addEventListener("click", () => {
+    if (state.enhanceOperation !== "return") return;
+    const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
+    const result = performEquipmentRollback(hero, state.enhanceEquipmentSlot, {
+      stoneKey: state.enhanceReturnStoneKey,
+      setNumber: state.enhanceEquipmentSet,
+    });
+    addLog(result.message);
+    state.enhanceOperation = null;
+    if (result.destroyed) state.enhanceEquipmentSlot = null;
+    showEquipment(state.equipmentCharacter);
+    render();
+    renderEnhancePanel();
+    persistPlayerSave();
+  });
+  $("#enhance-confirm").addEventListener("click", () => {
+    const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
+    const equipped = hero ? equipmentConfig(hero, state.enhanceEquipmentSet)?.[state.enhanceEquipmentSlot] : null;
+    const nextLevel = equipped ? normalizeEnhancement(equipped).level + 1 : 0;
+    const operationAllowed = nextLevel <= 4 ? state.enhanceOperation === "safe" : state.enhanceOperation === state.enhanceSelectedType;
+    if (!operationAllowed) return;
+    const result = performEquipmentEnhancement(hero, state.enhanceEquipmentSlot, {
+      attribute: state.enhanceSelectedAttribute,
+      type: state.enhanceSelectedType,
+      stoneKey: state.enhanceStoneKeys[state.enhanceSelectedType],
+      setNumber: state.enhanceEquipmentSet,
+    });
+    addLog(result.message);
+    const enhancedLevel = equipped ? normalizeEnhancement(equipped).level : 0;
+    state.enhanceOperation = result.success && enhancedLevel < 4 ? "safe" : null;
+    if (result.destroyed) state.enhanceEquipmentSlot = null;
+    showEquipment(state.equipmentCharacter);
+    render();
+    renderEnhancePanel();
+    persistPlayerSave();
+  });
+}
+
+function maximumEnhanceLevel(itemLevel) {
+  return Number(itemLevel) >= 80 ? 15 : Math.min(10, Math.floor(Number(itemLevel) / 10) + 5);
+}
+
+function equipmentEnhanceCost(item, instance) {
+  const itemLevel = Number(item.item_level);
+  const enhanceLevel = normalizeEnhancement(instance).level;
+  return Math.max(0, Math.round(Number(systemSettings().base_enhance_cost) * (1 + itemLevel / 10) * (enhanceLevel + 1)));
+}
+
+function equipmentRollbackCost(item, instance) {
+  const itemLevel = Number(item.item_level);
+  const enhanceLevel = normalizeEnhancement(instance).level;
+  return Math.max(0, Math.round(Number(systemSettings().base_enhance_cost) * (1 + itemLevel / 10) * enhanceLevel));
+}
+
+function enhancementRow(tableName, position) {
+  return state.data[tableName].find((row) => row.position === position);
+}
+
+function safeEnhanceOptions(item) {
+  const position = enhancementRow("enhanceSaveEnchant", item.EQ_position);
+  const values = enhancementRow("enhanceSaveEnchant", "stability_range");
+  return [...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS]
+    .filter((stat) => position?.[stat] === true)
+    .map((stat) => ({ stat, value: Number(values?.[stat]) || 0 }));
+}
+
+function overEnhancePool(item) {
+  const position = enhancementRow("enhanceOverEnchant", item.EQ_position);
+  return [...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS].filter((stat) => position?.[stat] === true);
+}
+
+function chaosEnhancePool(item) {
+  const position = enhancementRow("enhanceChaosEnchant", item.EQ_position);
+  return [...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS].filter((stat) => position?.[stat] === true);
+}
+
+function enhancementStoneEntries(type = null) {
+  const effectForType = { bless: "Bless_Enhance", curse: "Curse_Enhance", chaos: "Chaos_Enhance", return: "Return_Enhance" };
+  return state.inventory.filter((entry) => {
+    const item = state.data.item.find((candidate) => candidate.item_id === entry.itemId);
+    return item?.item_id.startsWith("sp")
+      && ["Bless_Enhance", "Curse_Enhance", "Chaos_Enhance", "Return_Enhance"].includes(item.effect)
+      && (!type || item.effect === effectForType[type])
+      && entry.quantity > 0;
+  });
+}
+
+function addEnhancementValues(target, values) {
+  for (const [stat, value] of Object.entries(values)) {
+    const total = Number(target[stat] ?? 0) + Number(value);
+    target[stat] = ["HPR", "MPR"].includes(stat) ? Math.round(total * 10) / 10 : total;
+  }
+}
+
+function randomIntegerWith(random, min, max) {
+  return Math.floor(random() * (max - min + 1)) + min;
+}
+
+function rollEnhancementValue(stat, min, max, multiplier, random) {
+  const scaledMin = Math.round(Number(min) * Number(multiplier) * 100) / 100;
+  const scaledMax = Math.round(Number(max) * Number(multiplier) * 100) / 100;
+  const raw = scaledMin + (scaledMax - scaledMin) * random();
+  const scale = ["HPR", "MPR"].includes(stat) ? 10 : 1;
+  return Math.ceil(raw * scale) / scale;
+}
+
+function formatEnhancementValue(stat, value) {
+  const numeric = Number(value) || 0;
+  return ["HPR", "MPR"].includes(stat) ? roundStat(numeric).toFixed(1) : formatExactNumber(numeric);
+}
+
+function inventoryButtonText(item) {
+  if (!item) return "";
+  if (item.isEquipment) return equipmentButtonText(catalogItem(item.itemId), item);
+  const enhancementStone = enhancementStoneDisplay(catalogItem(item.itemId));
+  return enhancementStone
+    ? `${enhancementStone.level}\n${enhancementStone.name}\nx ${item.quantity}`
+    : `${item.name}\nx ${item.quantity}`;
+}
+
+function enhancementStoneDisplay(item) {
+  const effectName = item?.effect === "Bless_Enhance"
+    ? "祝福強化"
+    : item?.effect === "Curse_Enhance" ? "詛咒強化"
+      : item?.effect === "Chaos_Enhance" ? "混沌強化"
+        : item?.effect === "Return_Enhance" ? "倒回強化" : null;
+  if (!effectName) return null;
+  const match = /^(Lv\.\d+)\s+(.+)$/.exec(String(item.item_name ?? "").trim());
+  return {
+    effectName,
+    level: match?.[1] ?? `Lv.${Number(item.item_level) || 1}`,
+    name: match?.[2] ?? item.item_name,
+  };
+}
+
+function drawEnhancementStats(pool, count, random) {
+  const available = [...pool];
+  const selected = [];
+  for (let index = 0; index < count; index++) {
+    const chosen = Math.min(available.length - 1, Math.floor(random() * available.length));
+    selected.push(available.splice(chosen, 1)[0]);
+  }
+  return selected;
+}
+
+function consumeInventoryEntry(entry) {
+  const index = state.inventory.indexOf(entry);
+  if (index < 0) return false;
+  if (entry.quantity > 1) entry.quantity -= 1;
+  else state.inventory.splice(index, 1);
+  return true;
+}
+
+function performEquipmentEnhancement(hero, equipmentSlot, selection = {}, random = Math.random) {
+  const setNumber = equipmentSetNumber(selection.setNumber ?? hero?.activeEquipmentSet);
+  const equipment = hero ? equipmentConfig(hero, setNumber) : null;
+  const equipped = equipment?.[equipmentSlot];
+  const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
+  if (!hero || !equipped || !item) return { success: false, message: "請先選擇仍然存在的裝備。" };
+  const instance = normalizeEquipmentInstance(equipped);
+  equipment[equipmentSlot] = instance;
+  const enhancement = instance.enhancement;
+  const nextLevel = enhancement.level + 1;
+  const maximum = maximumEnhanceLevel(item.item_level);
+  if (nextLevel > maximum) return {
+    success: false,
+    reason: "maximum_level",
+    message: `Set ${setNumber} 的 ${equipmentDisplayName(item, instance)}（裝備等級 ${item.item_level}）強化上限為 +${maximum}；未消耗金幣或強化石。`,
+  };
+  const levelSetting = nextLevel >= 5 ? state.data.enhanceLevel.find((row) => row.enhance_level === nextLevel) : null;
+  if (nextLevel >= 5 && (!levelSetting || !levelSetting.enabled)) return { success: false, message: `+${nextLevel} 尚未由 Enhance_level.csv 開放。` };
+  const cost = equipmentEnhanceCost(item, instance);
+  if (state.gold < cost) return { success: false, message: `金幣不足，需要 ${cost.toLocaleString()} 金幣。` };
+
+  if (nextLevel <= 4) {
+    const option = safeEnhanceOptions(item).find(({ stat }) => stat === selection.attribute);
+    if (!option) return { success: false, message: "請選擇本次安全強化屬性。" };
+    state.gold -= cost;
+    enhancement.level = nextLevel;
+    addEnhancementValues(enhancement.safeBonus, { [option.stat]: option.value });
+    enhancement.history.push({ level: nextLevel, type: "safe", attribute: option.stat, value: option.value, cost });
+    recalculateHeroStats(hero);
+    return { success: true, destroyed: false, cost, message: `${item.item_name} 強化為 +${nextLevel}，${option.stat} +${formatEnhancementValue(option.stat, option.value)}，消耗 ${cost.toLocaleString()} 金幣。` };
+  }
+
+  const stoneEntry = enhancementStoneEntries(selection.type).find((entry) => entry.key === selection.stoneKey || entry.itemUuid === selection.stoneKey);
+  const stone = stoneEntry ? state.data.item.find((candidate) => candidate.item_id === stoneEntry.itemId) : null;
+  if (!stone) return { success: false, message: "請選擇背包中的祝福或詛咒強化石。" };
+  const type = stone.effect === "Bless_Enhance" ? "bless" : stone.effect === "Curse_Enhance" ? "curse" : "chaos";
+  const stoneBonus = randomIntegerWith(random, Number(stone.effect_value_min), Number(stone.effect_value_max));
+  const actualSuccessRate = clamp(Number(levelSetting.success_rate) + stoneBonus, 0, 100);
+  state.gold -= cost;
+  consumeInventoryEntry(stoneEntry);
+  if (random() * 100 >= actualSuccessRate) {
+    delete equipment[equipmentSlot];
+    recalculateHeroStats(hero);
+    return {
+      success: false, destroyed: true, cost, actualSuccessRate,
+      message: `${equipmentDisplayName(item, instance)} 強化 +${nextLevel} 失敗並永久消失；消耗 ${cost.toLocaleString()} 金幣與 ${stone.item_name}。`,
+    };
+  }
+
+  const drawCount = type === "chaos" ? chaosEnhancePool(item).length : Number(levelSetting[type === "bless" ? "bless_affixes" : "curse_affixes"]);
+  const rangeTable = type === "chaos" ? "enhanceChaosEnchant" : "enhanceOverEnchant";
+  const rangeMin = enhancementRow(rangeTable, `${type}_min`);
+  const rangeMax = enhancementRow(rangeTable, `${type}_max`);
+  const results = {};
+  const pool = type === "chaos" ? chaosEnhancePool(item) : overEnhancePool(item);
+  for (const stat of drawEnhancementStats(pool, drawCount, random)) {
+    results[stat] = rollEnhancementValue(stat, Number(rangeMin[stat]), Number(rangeMax[stat]), levelSetting.enhance_buff, random);
+  }
+  enhancement.level = nextLevel;
+  enhancement[`${type}Count`] += 1;
+  addEnhancementValues(enhancement[`${type}Bonus`], results);
+  enhancement.history.push({
+    level: nextLevel, type, stone_item_id: stone.item_id, base_success_rate: levelSetting.success_rate,
+    stone_bonus: stoneBonus, actual_success_rate: actualSuccessRate, cost, results,
+  });
+  recalculateHeroStats(hero);
+  const resultText = Object.entries(results).map(([stat, value]) => `${stat} ${value >= 0 ? "+" : ""}${formatEnhancementValue(stat, value)}`).join("、");
+  return {
+    success: true, destroyed: false, cost, actualSuccessRate, results,
+    message: `${item.item_name} 強化為 +${nextLevel}（${{ bless: "祝福", curse: "詛咒", chaos: "混沌" }[type]}）：${resultText}。`,
+  };
+}
+
+function subtractEnhancementValues(target, values) {
+  for (const [stat, value] of Object.entries(values ?? {})) {
+    const total = Number(target[stat] ?? 0) - Number(value);
+    const normalized = ["HPR", "MPR"].includes(stat) ? Math.round(total * 10) / 10 : total;
+    if (Math.abs(normalized) < 1e-9) delete target[stat];
+    else target[stat] = normalized;
+  }
+}
+
+function performEquipmentRollback(hero, equipmentSlot, selection = {}, random = Math.random) {
+  const setNumber = equipmentSetNumber(selection.setNumber ?? hero?.activeEquipmentSet);
+  const equipment = hero ? equipmentConfig(hero, setNumber) : null;
+  const equipped = equipment?.[equipmentSlot];
+  const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
+  if (!hero || !equipped || !item) return { success: false, message: "請先選擇仍然存在的裝備。" };
+  const instance = normalizeEquipmentInstance(equipped);
+  equipment[equipmentSlot] = instance;
+  const enhancement = instance.enhancement;
+  const currentLevel = enhancement.level;
+  if (currentLevel < 5) return { success: false, message: "裝備最低只能倒回至 +4。" };
+  const lastEntryIndex = enhancement.history.reduce((found, entry, index) => Number(entry.level) === currentLevel ? index : found, -1);
+  const lastEntry = enhancement.history[lastEntryIndex];
+  if (!lastEntry) return { success: false, message: `找不到 +${currentLevel} 的強化紀錄，未執行倒回。` };
+  const levelSetting = state.data.enhanceLevel.find((row) => row.enhance_level === currentLevel);
+  if (!levelSetting?.enabled) return { success: false, message: `+${currentLevel} 尚未在 Enhance_level.csv 開放。` };
+  const stoneEntry = enhancementStoneEntries("return").find((entry) => entry.key === selection.stoneKey || entry.itemUuid === selection.stoneKey);
+  const stone = stoneEntry ? state.data.item.find((candidate) => candidate.item_id === stoneEntry.itemId) : null;
+  if (!stone || stone.effect !== "Return_Enhance") return { success: false, message: "背包中沒有可用的倒回石。" };
+  const cost = equipmentRollbackCost(item, instance);
+  if (state.gold < cost) return { success: false, message: `金幣不足，需要 ${cost.toLocaleString()} 金幣。` };
+  const stoneBonus = randomIntegerWith(random, Number(stone.effect_value_min), Number(stone.effect_value_max));
+  const actualSuccessRate = clamp(Number(levelSetting.success_rate) + stoneBonus, 0, 100);
+  state.gold -= cost;
+  consumeInventoryEntry(stoneEntry);
+  if (random() * 100 >= actualSuccessRate) {
+    delete equipment[equipmentSlot];
+    recalculateHeroStats(hero);
+    return {
+      success: false, destroyed: true, cost, actualSuccessRate,
+      message: `${equipmentDisplayName(item, instance)} 倒回至 +${currentLevel - 1} 失敗並永久消失；消耗 ${cost.toLocaleString()} 金幣與 ${stone.item_name}。`,
+    };
+  }
+  if (lastEntry.type === "safe") {
+    subtractEnhancementValues(enhancement.safeBonus, { [lastEntry.attribute]: lastEntry.value });
+  } else if (["bless", "curse", "chaos"].includes(lastEntry.type)) {
+    subtractEnhancementValues(enhancement[`${lastEntry.type}Bonus`], lastEntry.results);
+    enhancement[`${lastEntry.type}Count`] = Math.max(0, enhancement[`${lastEntry.type}Count`] - 1);
+  } else {
+    return { success: false, message: `無法辨識 +${currentLevel} 的強化類型，未執行倒回。` };
+  }
+  enhancement.history.splice(lastEntryIndex, 1);
+  enhancement.level = currentLevel - 1;
+  enhancement.returnCount += 1;
+  recalculateHeroStats(hero);
+  return {
+    success: true, destroyed: false, cost, actualSuccessRate, removed: lastEntry,
+    message: `${item.item_name} 已倒回至 +${enhancement.level}，最後一次${enhancementTypeLabel(lastEntry.type)}強化結果已移除。`,
+  };
+}
+
+function renderEnhancePanelLegacy() {
+  const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
+  if (!hero) return;
+  document.querySelectorAll("#enhance-characters button").forEach((button) => button.classList.toggle("active", button.dataset.character === hero.slot));
+  $("#enhance-class").textContent = hero.className;
+  const selectedSet = equipmentSetNumber(state.enhanceEquipmentSet);
+  document.querySelectorAll("[data-enhance-set]").forEach((button) => button.classList.toggle("active", Number(button.dataset.enhanceSet) === selectedSet));
+  const selectedEquipment = equipmentConfig(hero, selectedSet);
+  for (const button of document.querySelectorAll("#enhance-equipment-grid [data-slot]")) {
+    const equipped = selectedEquipment[button.dataset.slot];
+    const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
+    button.disabled = !item;
+    button.classList.toggle("equipped", Boolean(item));
+    button.classList.remove("mirror-equipment");
+    button.classList.toggle("selected", button.dataset.slot === state.enhanceEquipmentSlot && Boolean(item));
+    button.textContent = item ? equipmentButtonText(item, equipped) : equipmentSlotLabel(button.dataset.position.split(",")[0]);
+    applyEnhancementVisual(button, equipped);
+    assignEquipmentTooltip(button, item, `Set ${selectedSet}；點擊選擇`, equipped);
+    if (!item) button.title = "尚未裝備";
+  }
+
+  const equipped = selectedEquipment[state.enhanceEquipmentSlot];
+  const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
+  const options = $("#enhance-attribute-options");
+  const stoneRow = $("#enhance-stone-row");
+  const stoneSelect = $("#enhance-stone");
+  const confirm = $("#enhance-confirm");
+  options.replaceChildren();
+  stoneSelect.replaceChildren();
+  stoneRow.hidden = true;
+  confirm.disabled = true;
+  if (!item) {
+    $("#enhance-item-name").textContent = "請選擇裝備";
+    $("#enhance-summary").textContent = "點選左側已裝備的物品。";
+    $("#enhance-message").textContent = "";
+    confirm.textContent = "執行強化";
+    return;
+  }
+
+  const enhancement = normalizeEnhancement(equipped);
+  const nextLevel = enhancement.level + 1;
+  const maximum = maximumEnhanceLevel(item.item_level);
+  const cost = equipmentEnhanceCost(item, equipped);
+  $("#enhance-item-name").textContent = equipmentDisplayName(item, equipped);
+  $("#enhance-summary").textContent = `下一階 +${nextLevel}｜上限 +${maximum}\n費用 ${cost.toLocaleString()} 金幣｜持有 ${state.gold.toLocaleString()} 金幣`;
+  if (nextLevel > maximum) {
+    $("#enhance-message").textContent = `Set ${selectedSet}｜裝備等級 ${item.item_level} 的強化上限為 +${maximum}；不會讀取或消耗強化石。`;
+    return;
+  }
+  if (nextLevel <= 4) {
+    for (const option of safeEnhanceOptions(item)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `${option.stat} +${formatEnhancementValue(option.stat, option.value)}`;
+      button.classList.toggle("selected", state.enhanceSelectedAttribute === option.stat);
+      button.addEventListener("click", () => { state.enhanceSelectedAttribute = option.stat; renderEnhancePanel(); });
+      options.append(button);
+    }
+    $("#enhance-message").textContent = "安全強化成功率 100%，請選擇一項屬性。";
+    confirm.disabled = !state.enhanceSelectedAttribute || state.gold < cost;
+    confirm.textContent = `強化至 +${nextLevel}`;
+    return;
+  }
+
+  const setting = state.data.enhanceLevel.find((row) => row.enhance_level === nextLevel);
+  if (!setting || !setting.enabled) {
+    $("#enhance-message").textContent = `+${nextLevel} 尚未開放。`;
+    return;
+  }
+  const stones = enhancementStoneEntries();
+  stoneRow.hidden = false;
+  for (const entry of stones) {
+    const stone = state.data.item.find((candidate) => candidate.item_id === entry.itemId);
+    const option = document.createElement("option");
+    option.value = entry.key;
+    option.textContent = `${stone.item_name} × ${entry.quantity}`;
+    stoneSelect.append(option);
+  }
+  if (!stones.some((entry) => entry.key === state.enhanceStoneKey)) state.enhanceStoneKey = stones[0]?.key ?? null;
+  stoneSelect.value = state.enhanceStoneKey ?? "";
+  $("#enhance-message").textContent = stones.length
+    ? "失敗時裝備與強化石永久消失。"
+    : "背包中沒有可用的祝福或詛咒強化石。";
+  confirm.disabled = !state.enhanceStoneKey || state.gold < cost;
+  confirm.textContent = `嘗試強化至 +${nextLevel}`;
+}
+
+function enhancementTypeLabel(type) {
+  return { safe: "安全", bless: "祝福", curse: "詛咒", chaos: "混沌" }[type] ?? type;
+}
+
+function renderEnhancementHistory(enhancement = emptyEnhancement()) {
+  const safeContainer = $("#enhance-safe-history");
+  const overContainer = $("#enhance-over-history");
+  safeContainer.replaceChildren();
+  overContainer.replaceChildren();
+  const currentLevel = Math.max(0, Number(enhancement.level) || 0);
+  for (let level = 1; level <= Math.min(4, currentLevel); level++) {
+    const entry = enhancement.history.find((row) => Number(row.level) === level);
+    const cell = document.createElement("div");
+    cell.textContent = entry?.attribute ? `${entry.attribute}+${formatEnhancementValue(entry.attribute, entry.value)}` : "—";
+    safeContainer.append(cell);
+  }
+  for (let level = 5; level <= currentLevel; level++) {
+    const entry = enhancement.history.find((row) => Number(row.level) === level);
+    const row = document.createElement("div");
+    row.className = "enhance-history-row";
+    const heading = document.createElement("strong");
+    heading.textContent = entry ? `[${enhancementTypeLabel(entry.type)}]+${level}` : `+${level}`;
+    row.append(heading);
+    const results = document.createElement("div");
+    results.className = "enhance-history-results";
+    if (entry?.results) {
+      for (const [stat, amount] of Object.entries(entry.results)) {
+        const value = Number(amount) || 0;
+        const result = document.createElement("span");
+        result.textContent = `${stat} ${value >= 0 ? "+" : ""}${formatEnhancementValue(stat, value)}`;
+        result.style.color = indexedColor(value > 0 ? "left_enhance_positive_name" : value < 0 ? "left_enhance_negative_name" : "left_enhance_unchange_name");
+        results.append(result);
+      }
+    } else {
+      const empty = document.createElement("span");
+      empty.textContent = "—";
+      results.append(empty);
+    }
+    row.append(results);
+    overContainer.append(row);
+  }
+}
+
+// The current enhancement view keeps controls compact and dedicates the third column to persisted history.
+function renderEnhancePanel() {
+  const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
+  if (!hero) return;
+  document.querySelectorAll("#enhance-characters button").forEach((button) => button.classList.toggle("active", button.dataset.character === hero.slot));
+  $("#enhance-class").textContent = hero.className;
+  $("#enhance-owned-gold").textContent = `持有 ${state.gold.toLocaleString()} 金幣`;
+  const selectedSet = equipmentSetNumber(state.enhanceEquipmentSet);
+  document.querySelectorAll("[data-enhance-set]").forEach((button) => button.classList.toggle("active", Number(button.dataset.enhanceSet) === selectedSet));
+  const equipment = equipmentConfig(hero, selectedSet);
+  for (const button of document.querySelectorAll("#enhance-equipment-grid [data-slot]")) {
+    const equipped = equipment[button.dataset.slot];
+    const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
+    button.disabled = !item;
+    button.classList.toggle("equipped", Boolean(item));
+    button.classList.remove("mirror-equipment");
+    button.classList.toggle("selected", button.dataset.slot === state.enhanceEquipmentSlot && Boolean(item));
+    button.textContent = item ? equipmentButtonText(item, equipped) : equipmentSlotLabel(button.dataset.position.split(",")[0]);
+    applyEnhancementVisual(button, equipped);
+    assignEquipmentTooltip(button, item, `Set ${selectedSet}：點選後強化`, equipped);
+  }
+
+  const equipped = equipment[state.enhanceEquipmentSlot];
+  const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
+  const options = $("#enhance-attribute-options");
+  const specialControls = $("#enhance-special-controls");
+  const returnControls = $("#enhance-return-controls");
+  const returnSelect = $("#enhance-return-stone");
+  const returnMode = $("#enhance-return-mode");
+  const returnConfirm = $("#enhance-return-confirm");
+  const confirm = $("#enhance-confirm");
+  options.replaceChildren();
+  specialControls.hidden = true;
+  returnControls.hidden = true;
+  confirm.disabled = true;
+  renderEnhancementHistory(item ? normalizeEnhancement(equipped) : emptyEnhancement());
+  if (!item) {
+    $("#enhance-item-name").textContent = "請選擇裝備";
+    $("#enhance-cost-summary").textContent = "請先選擇裝備";
+    $("#enhance-message").textContent = "";
+    return;
+  }
+
+  const enhancement = normalizeEnhancement(equipped);
+  const nextLevel = enhancement.level + 1;
+  const maximum = maximumEnhanceLevel(item.item_level);
+  const cost = equipmentEnhanceCost(item, equipped);
+  $("#enhance-item-name").textContent = equipmentDisplayName(item, equipped);
+  $("#enhance-cost-summary").textContent = `下一階 +${nextLevel}｜費用 ${cost.toLocaleString()} 金幣｜上限 +${maximum}`;
+  confirm.textContent = `強化至 +${nextLevel}`;
+  const returnStones = enhancementStoneEntries("return");
+  if (returnStones.length) {
+    returnControls.hidden = false;
+    returnSelect.replaceChildren(...returnStones.map((entry) => {
+      const option = document.createElement("option");
+      option.value = entry.key;
+      option.textContent = `${catalogItem(entry.itemId).item_name} × ${entry.quantity}`;
+      return option;
+    }));
+    if (!returnStones.some((entry) => entry.key === state.enhanceReturnStoneKey)) state.enhanceReturnStoneKey = returnStones[0]?.key ?? null;
+    returnSelect.value = state.enhanceReturnStoneKey ?? "";
+    returnMode.classList.toggle("selected", state.enhanceOperation === "return");
+    returnConfirm.textContent = `倒回至 +${Math.max(4, enhancement.level - 1)}`;
+    returnSelect.disabled = enhancement.level < 5;
+    returnMode.disabled = enhancement.level < 5;
+    returnConfirm.disabled = state.enhanceOperation !== "return" || enhancement.level < 5 || !state.enhanceReturnStoneKey || state.gold < equipmentRollbackCost(item, equipped);
+  }
+  if (nextLevel > maximum) {
+    $("#enhance-message").textContent = `此裝備目前上限為 +${maximum}。`;
+    return;
+  }
+  if (nextLevel <= 4) {
+    for (const option of safeEnhanceOptions(item)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `${option.stat} +${formatEnhancementValue(option.stat, option.value)}`;
+      button.classList.toggle("selected", state.enhanceSelectedAttribute === option.stat);
+      button.addEventListener("click", () => { state.enhanceSelectedAttribute = option.stat; state.enhanceOperation = "safe"; renderEnhancePanel(); });
+      options.append(button);
+    }
+    $("#enhance-message").textContent = "安全強化成功率 100%。";
+    confirm.disabled = state.enhanceOperation !== "safe" || !state.enhanceSelectedAttribute || state.gold < cost;
+    return;
+  }
+
+  const setting = state.data.enhanceLevel.find((row) => row.enhance_level === nextLevel);
+  if (!setting?.enabled) {
+    $("#enhance-message").textContent = `+${nextLevel} 尚未在 Enhance_level.csv 開放。`;
+    return;
+  }
+  specialControls.hidden = false;
+  for (const type of ["bless", "curse", "chaos"]) {
+    const select = $(`#enhance-stone-${type}`);
+    const stones = enhancementStoneEntries(type);
+    select.replaceChildren(...stones.map((entry) => {
+      const option = document.createElement("option");
+      option.value = entry.key;
+      option.textContent = `${catalogItem(entry.itemId).item_name} × ${entry.quantity}`;
+      return option;
+    }));
+    if (!stones.some((entry) => entry.key === state.enhanceStoneKeys[type])) state.enhanceStoneKeys[type] = stones[0]?.key ?? null;
+    select.value = state.enhanceStoneKeys[type] ?? "";
+  }
+  document.querySelectorAll("[data-enhance-type]").forEach((button) => button.classList.toggle("selected", state.enhanceOperation === button.dataset.enhanceType));
+  const selectedStone = state.enhanceStoneKeys[state.enhanceSelectedType];
+  $("#enhance-message").textContent = selectedStone ? "失敗時裝備與強化石永久消失。" : `沒有可用的${enhancementTypeLabel(state.enhanceSelectedType)}石。`;
+  confirm.disabled = state.enhanceOperation !== state.enhanceSelectedType || !selectedStone || state.gold < cost;
+}
+
+function hasValidItemCooldown(item) {
+  return item?.cooldown !== null && item?.cooldown !== undefined && Number.isFinite(Number(item.cooldown)) && Number(item.cooldown) >= 0;
+}
+
+function renderRecoveryPanel() {
+  const missingCooldown = state.data.item.filter((item) => ["HPrecover", "MPrecover"].includes(item.effect) && !hasValidItemCooldown(item));
+  $("#recovery-warning").textContent = missingCooldown.length
+    ? `item.csv 尚未提供 cooldown 欄位：${missingCooldown.map((item) => item.item_name).join("、")}的自動與手動使用目前暫停。`
+    : "";
+  const container = $("#recovery-settings"); container.replaceChildren();
+  for (const hero of state.roster) {
+    const row = document.createElement("div"); row.className = "recovery-row";
+    const identity = document.createElement("label"); identity.className = "recovery-identity";
+    const className = document.createElement("strong"); className.textContent = hero.className;
+    const name = document.createElement("input"); name.type = "text"; name.maxLength = 20;
+    name.value = hero.customName ?? "";
+    name.placeholder = `${hero.className}的名稱`;
+    name.setAttribute("aria-label", `${hero.className}角色名稱，最多20個字`);
+    name.addEventListener("input", () => {
+      const limited = normalizeCharacterName(name.value);
+      name.value = limited;
+      hero.customName = limited;
+      hero.name = limited || hero.className;
+      render();
+      if ($("#character-info-dialog")?.open) renderCharacterInfoPanel();
+    });
+    name.addEventListener("change", () => {
+      name.value = setCharacterName(hero, name.value);
+    });
+    identity.append(className, name);
+    const hp = createRecoveryControl(hero, "hp", "HP");
+    const mp = createRecoveryControl(hero, "mp", "MP");
+    const reset = document.createElement("button"); reset.type = "button";
+    const remaining = Math.max(0, Math.ceil((hero.resetAvailableAt - Date.now()) / 1000));
+    reset.disabled = remaining > 0;
+    reset.textContent = remaining > 0 ? `冷卻 ${remaining} 秒` : "重置職業";
+    reset.addEventListener("click", () => {
+      if (!window.confirm(`確定重置${hero.name}？等級、屬性、技能與裝備會回到 classes.csv 初始狀態。`)) return;
+      resetHero(hero.classId);
+    });
+    row.append(identity, hp, mp, reset); container.append(row);
+  }
+}
+
+function createRecoveryControl(hero, key, label) {
+  const wrapper = document.createElement("label"); wrapper.className = "recovery-auto-control";
+  const enabled = document.createElement("input"); enabled.type = "checkbox"; enabled.checked = hero.recoverySettings[`${key}Enabled`] !== false;
+  enabled.setAttribute("aria-label", `${hero.className} 自動${label}`);
+  enabled.addEventListener("change", () => { hero.recoverySettings[`${key}Enabled`] = enabled.checked; persistPlayerSave(); });
+  const text = document.createElement("span"); text.textContent = `自動${label}`;
+  const percent = document.createElement("input"); percent.type = "number"; percent.min = "1"; percent.max = "100"; percent.step = "1";
+  percent.value = hero.recoverySettings[`${key}Percent`]; percent.setAttribute("aria-label", `${hero.className} ${label} 自動使用百分比`);
+  percent.addEventListener("change", () => {
+    hero.recoverySettings[`${key}Percent`] = clamp(Number(percent.value) || 20, 1, 100);
+    percent.value = hero.recoverySettings[`${key}Percent`];
+    persistPlayerSave();
+  });
+  const suffix = document.createElement("span"); suffix.textContent = "%";
+  const effect = key === "hp" ? "HPrecover" : "MPrecover";
+  const ownedIds = new Set(state.inventory.filter((entry) => !entry.isEquipment && Number(entry.quantity ?? 1) > 0).map((entry) => entry.itemId));
+  const available = state.data.item.filter((item) => item.effect === effect && ownedIds.has(item.item_id));
+  const itemSettingKey = `${key}ItemId`;
+  if (!available.some((item) => item.item_id === hero.recoverySettings[itemSettingKey])) {
+    hero.recoverySettings[itemSettingKey] = available[0]?.item_id ?? null;
+  }
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", `${hero.className} 自動${label}藥水`);
+  if (!available.length) {
+    const option = document.createElement("option"); option.value = ""; option.textContent = "沒有可用藥水"; select.append(option); select.disabled = true;
+  } else {
+    for (const item of available) {
+      const quantity = state.inventory.filter((entry) => entry.itemId === item.item_id).reduce((sum, entry) => sum + Number(entry.quantity ?? 1), 0);
+      const option = document.createElement("option"); option.value = item.item_id; option.textContent = `${item.item_name} × ${quantity}`; select.append(option);
+    }
+    select.value = hero.recoverySettings[itemSettingKey];
+    select.addEventListener("change", () => { hero.recoverySettings[itemSettingKey] = select.value || null; persistPlayerSave(); });
+  }
+  wrapper.append(enabled, text, percent, suffix, select);
+  return wrapper;
+}
+
+function resetHero(classId, now = Date.now()) {
+  const hero = state.roster.find((member) => member.classId === classId);
+  const cls = state.data.classes.find((row) => row.class_id === classId);
+  if (!hero || !cls || now < hero.resetAvailableAt) return false;
+  for (const equipmentSet of Object.values(hero.equipmentSets)) {
+    for (const equipped of Object.values(equipmentSet)) returnEquippedItemToInventory(equipped);
+  }
+  hero.level = 1; hero.exp = 0;
+  hero.attributes = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, cls[key] ?? 0]));
+  hero.levelPlan = defaultLevelPlan(hero.attributes);
+  hero.growthStats = Object.fromEntries(DERIVED_STAT_KEYS.map((key) => [key, 0]));
+  initializeEquipmentSets(hero);
+  state.equipmentEditSets[hero.classId] = 1;
+  hero.learnedSkillIds = new Set(); hero.skillEnabled = {}; hero.skillCooldowns = {}; hero.itemCooldowns = {};
+  hero.skillSettings = {};
+  hero.cooldown = 0; hero.casting = null; hero.buffs = [];
+  assignInitialEquipment(hero, cls); recalculateHeroStats(hero, true); grantBuiltInSkills(hero); grantInitialItemForHero(hero);
+  hero.resetAvailableAt = now + 60000;
+  addLog(`${hero.name} 已重置為 classes.csv 初始狀態，並重新取得初始裝備與道具。`);
+  updateMapLocks(); updateCharacterControls(); showEquipment(state.equipmentCharacter); render(); renderRecoveryPanel(); persistPlayerSave();
+  return true;
+}
+
+function skillIdOrder(skill) {
+  const match = String(skill.skill_id ?? "").match(/^csk(\d+)$/i);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function classSkills(hero) {
+  return state.data.characterSkills.filter((skill) => skill.class_id === hero.classId)
+    .sort((a, b) => skillIdOrder(a) - skillIdOrder(b) || String(a.skill_id).localeCompare(String(b.skill_id)));
+}
+
+function grantBuiltInSkills(hero) {
+  for (const skill of state.data.characterSkills.filter((row) => row.class_id === hero.classId && row.is_book === false)) {
+    hero.learnedSkillIds.add(skill.skill_id);
+    if (!(skill.skill_id in hero.skillEnabled)) hero.skillEnabled[skill.skill_id] = Boolean(skill.enabled);
+    hero.skillCooldowns[skill.skill_id] ??= 0;
+    ensureSkillSetting(hero, skill);
+  }
+}
+
+function learnSkill(hero, skillId) {
+  const skill = state.data.characterSkills.find((row) => row.skill_id === skillId && row.class_id === hero.classId);
+  if (!skill || hero.level < skill.level) return false;
+  hero.learnedSkillIds.add(skillId);
+  if (!(skillId in hero.skillEnabled)) hero.skillEnabled[skillId] = Boolean(skill.enabled);
+  hero.skillCooldowns[skillId] ??= 0;
+  ensureSkillSetting(hero, skill);
+  return true;
+}
+
+function ensureSkillSetting(hero, skill) {
+  const current = hero.skillSettings[skill.skill_id] ?? (hero.skillSettings[skill.skill_id] = {});
+  const defaultTrigger = skill.damage_type === "heal" ? 30 : (skill.trigger_value ?? 100);
+  current.triggerValue = clamp(Number(current.triggerValue ?? defaultTrigger), 1, 100);
+  current.minTargets = Math.max(1, Math.trunc(Number(current.minTargets ?? skill.min_targets ?? 1)));
+  current.mpThreshold = Math.max(0, Number(current.mpThreshold) || 0);
+  current.enemyCountThreshold = clamp(Math.trunc(Number(current.enemyCountThreshold ?? 1) || 1), 1, 3);
+  return current;
+}
+
+function renderSkillPanel() {
+  const hero = state.party.find((member) => member.slot === state.skillCharacter);
+  const titleHelp = $("#skill-title-help");
+  if (titleHelp) titleHelp.style.color = indexedColor("mid_skill_help");
+  document.querySelectorAll("#skill-characters button").forEach((button) => button.classList.toggle("active", button.dataset.character === hero.slot));
+  const list = $("#skill-list"); list.replaceChildren();
+  for (const skill of classSkills(hero)) {
+    const learned = hero.learnedSkillIds.has(skill.skill_id);
+    list.append(createSkillRow(skill, learned, hero.skillEnabled[skill.skill_id] ?? Boolean(skill.enabled), hero));
+  }
+}
+
+function createSkillRow(skill, learned, enabled, hero = null) {
+  const row = document.createElement("label"); row.className = `skill-row${learned ? "" : " locked"}${hero ? "" : " normal"}`;
+  const input = document.createElement("input"); input.type = "checkbox"; input.checked = learned && enabled; input.disabled = !hero || !learned || hero.level < skill.level;
+  const copy = document.createElement("span"); copy.className = "skill-copy";
+  const mainline = document.createElement("span"); mainline.className = "skill-mainline";
+  const name = document.createElement("strong"); name.textContent = skill.name;
+  const detail = document.createElement("small"); detail.className = "skill-detail";
+  const priority = document.createElement("span"); priority.className = "skill-priority"; priority.textContent = `優先度 ${skill.use_priority}`;
+  const mp = document.createElement("span"); mp.className = "skill-emphasis"; mp.textContent = `MP ${skill.cost}`;
+  const cooldown = document.createElement("span"); cooldown.className = "skill-emphasis"; cooldown.textContent = `冷卻 ${skill.cooldown}s`;
+  detail.append(priority, mp, cooldown);
+  if (skill.cast_time) {
+    const cast = document.createElement("span"); cast.className = "skill-emphasis"; cast.textContent = `施法 ${skill.cast_time}s`; detail.append(cast);
+  }
+  if (String(skill.skill_intro ?? "").trim()) {
+    const intro = document.createElement("span");
+    intro.className = "skill-intro";
+    intro.textContent = String(skill.skill_intro).trim();
+    intro.style.color = indexedColor("skill_intro_color");
+    detail.append(intro);
+  }
+  mainline.append(name);
+  if (hero) {
+    const setting = ensureSkillSetting(hero, skill);
+    const mpControls = document.createElement("span"); mpControls.className = "skill-mp-controls";
+    const mpLabel = document.createElement("label"); mpLabel.textContent = "施放MP >";
+    const mpInput = document.createElement("input"); mpInput.type = "number"; mpInput.min = "0"; mpInput.step = "1"; mpInput.value = setting.mpThreshold;
+    mpInput.setAttribute("aria-label", `${skill.name} 施放 MP 門檻`);
+    mpInput.addEventListener("change", () => {
+      setting.mpThreshold = Math.max(0, Number(mpInput.value) || 0);
+      mpInput.value = setting.mpThreshold;
+      persistPlayerSave();
+    });
+    mpLabel.append(mpInput); mpControls.append(mpLabel); mainline.append(mpControls);
+  }
+  if (hero && skill.damage_target === "aoe") {
+    const setting = ensureSkillSetting(hero, skill);
+    const controls = document.createElement("span"); controls.className = "skill-trigger-controls skill-monster-count-controls";
+    const separator = document.createElement("span"); separator.className = "skill-separator"; separator.textContent = "|";
+    const countLabel = document.createElement("label"); countLabel.textContent = "敵方人數 ≥";
+    const countInput = document.createElement("input"); countInput.type = "number"; countInput.min = "1"; countInput.max = "3"; countInput.step = "1"; countInput.value = setting.enemyCountThreshold;
+    countInput.setAttribute("aria-label", `${skill.name} 敵方隊伍人數門檻`);
+    countInput.addEventListener("change", () => {
+      setting.enemyCountThreshold = clamp(Math.trunc(Number(countInput.value) || 1), 1, 3);
+      countInput.value = setting.enemyCountThreshold;
+      persistPlayerSave();
+    });
+    countLabel.append(countInput, "人"); controls.append(separator, countLabel); mainline.append(controls);
+  }
+  if (hero && (skill.damage_type === "heal" || ["ally_hp_below", "ally_mp_below"].includes(skill.trigger_type))) {
+    const setting = ensureSkillSetting(hero, skill);
+    const resource = skill.trigger_type === "ally_mp_below" ? "MP" : "HP";
+    const controls = document.createElement("span"); controls.className = `skill-trigger-controls ${resource === "MP" ? "skill-mp-trigger-controls" : "skill-hp-controls"}`;
+    const separator = document.createElement("span"); separator.className = "skill-separator"; separator.textContent = "|";
+    controls.append(separator);
+    const hpLabel = document.createElement("label"); hpLabel.textContent = `${resource}≤`;
+    const hpInput = document.createElement("input"); hpInput.type = "number"; hpInput.min = "1"; hpInput.max = "100"; hpInput.step = "1"; hpInput.value = setting.triggerValue;
+    hpInput.setAttribute("aria-label", `${skill.name} ${resource} 觸發百分比`);
+    hpInput.addEventListener("change", () => { setting.triggerValue = clamp(Number(hpInput.value) || (skill.damage_type === "heal" ? 30 : 100), 1, 100); hpInput.value = setting.triggerValue; persistPlayerSave(); });
+    hpLabel.append(hpInput, "%"); controls.append(hpLabel);
+    if (skill.min_targets !== null && skill.min_targets !== undefined) {
+      const countSeparator = document.createElement("span"); countSeparator.className = "skill-separator"; countSeparator.textContent = "|";
+      const countLabel = document.createElement("label"); countLabel.textContent = "人數≥";
+      const countInput = document.createElement("input"); countInput.type = "number"; countInput.min = "1"; countInput.max = "3"; countInput.step = "1"; countInput.value = setting.minTargets;
+      countInput.setAttribute("aria-label", `${skill.name} 最少觸發人數`);
+      countInput.addEventListener("change", () => { setting.minTargets = clamp(Math.trunc(Number(countInput.value) || 1), 1, 3); countInput.value = setting.minTargets; persistPlayerSave(); });
+      countLabel.append(countInput); controls.append(countSeparator, countLabel);
+    }
+    mainline.append(controls);
+  }
+  copy.append(mainline, detail);
+  const status = document.createElement("span"); status.className = "skill-state";
+  if (!hero) status.textContent = "固定啟用";
+  else if (!learned) status.textContent = `未學習（需求 Lv.${skill.level}）`;
+  else status.textContent = enabled ? "已啟用" : "已停用";
+  if (hero) input.addEventListener("change", () => { hero.skillEnabled[skill.skill_id] = input.checked; status.textContent = input.checked ? "已啟用" : "已停用"; });
+  row.append(input, copy, status); return row;
+}
+
+function grantInitialItems() {
+  for (const hero of state.roster) grantInitialItemForHero(hero);
+}
+
+function catalogItem(itemId) {
+  return state.data.item.find((item) => item.item_id === itemId)
+    ?? state.data.equipment.find((item) => item.item_id === itemId);
+}
+
+function grantInitialItemForHero(hero) {
+  const cls = state.data.classes.find((row) => row.class_id === hero.classId);
+  if (!cls?.initial_item || !cls.initial_item_value) return;
+  const source = catalogItem(cls.initial_item);
+  addInventoryItem(cls.initial_item, source?.item_name ?? cls.initial_item, cls.initial_item_value);
+}
+
+function setupRightPanel() {
+  for (const button of document.querySelectorAll("[data-right-page]")) {
+    button.addEventListener("click", () => {
+      state.rightPage = button.dataset.rightPage;
+      document.querySelectorAll("[data-right-page]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+      $("#right-battle-page").hidden = state.rightPage !== "battle";
+      $("#right-shop-page").hidden = state.rightPage !== "shop";
+      if (state.rightPage === "shop") renderShop();
+    });
+  }
+  for (const button of document.querySelectorAll("[data-log-channel]")) {
+    button.addEventListener("click", () => {
+      state.battleLogChannel = button.dataset.logChannel;
+      document.querySelectorAll("[data-log-channel]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+      document.querySelectorAll("[data-log-panel]").forEach((panel) => { panel.hidden = panel.dataset.logPanel !== state.battleLogChannel; });
+    });
+  }
+}
+
+function setupShop() {
+  for (const button of document.querySelectorAll("[data-shop-mode]")) {
+    button.addEventListener("click", () => {
+      state.shopMode = button.dataset.shopMode;
+      document.querySelectorAll("[data-shop-mode]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+      renderShop();
+    });
+  }
+  renderShop();
+}
+
+function canBuyItem(item) {
+  const configuredPrice = item?.buy_gold ?? item?.buy_money;
+  return item?.buy_level !== null && item?.buy_level !== undefined && configuredPrice !== null && configuredPrice !== undefined && configuredPrice !== "";
+}
+
+function itemSellPrice(item) {
+  const configuredPrice = item?.sell_gold ?? item?.sell_money;
+  const price = Number(configuredPrice);
+  return configuredPrice !== null && configuredPrice !== undefined && configuredPrice !== "" && Number.isFinite(price) && price >= 0
+    ? price
+    : null;
+}
+
+function isAutoSellEligibleEntry(entry) {
+  return isAutoSellCandidateEntry(entry) && !entry.locked;
+}
+
+function isAutoSellCandidateEntry(entry) {
+  if (!entry || itemSellPrice(catalogItem(entry.itemId)) === null) return false;
+  return !entry.isEquipment || normalizeEnhancement(entry).level === 0;
+}
+
+function autoSellExistingInventory(itemId) {
+  const item = catalogItem(itemId);
+  const price = itemSellPrice(item);
+  if (!item || price === null) return { quantity: 0, gold: 0 };
+  let quantity = 0;
+  for (let index = state.inventory.length - 1; index >= 0; index -= 1) {
+    const entry = state.inventory[index];
+    if (entry.itemId !== itemId || !isAutoSellEligibleEntry(entry)) continue;
+    quantity += entry.isEquipment ? 1 : Math.max(1, Math.trunc(Number(entry.quantity) || 1));
+    state.inventory.splice(index, 1);
+  }
+  const gold = quantity * price;
+  state.gold += gold;
+  if (quantity > 0) addLog(`自動賣出 ${item.item_name} × ${quantity}，獲得 ${gold} 金幣。`);
+  return { quantity, gold };
+}
+
+function setAutoSellRule(itemId, enabled) {
+  const item = catalogItem(itemId);
+  if (!item || itemSellPrice(item) === null) return false;
+  if (enabled) {
+    state.autoSellItemIds.add(itemId);
+    autoSellExistingInventory(itemId);
+  } else state.autoSellItemIds.delete(itemId);
+  render();
+  persistPlayerSave();
+  return state.autoSellItemIds.has(itemId);
+}
+
+function autoSellCatalogEntries() {
+  const itemIds = [];
+  for (const entry of state.inventory) {
+    if (isAutoSellCandidateEntry(entry) && !itemIds.includes(entry.itemId)) itemIds.push(entry.itemId);
+  }
+  for (const itemId of state.autoSellItemIds) if (!itemIds.includes(itemId) && itemSellPrice(catalogItem(itemId)) !== null) itemIds.push(itemId);
+  return itemIds.map((itemId) => {
+    const item = catalogItem(itemId);
+    const quantity = state.inventory
+      .filter((entry) => entry.itemId === itemId && isAutoSellCandidateEntry(entry))
+      .reduce((sum, entry) => sum + (entry.isEquipment ? 1 : Math.max(1, Math.trunc(Number(entry.quantity) || 1))), 0);
+    return { item, quantity };
+  });
+}
+
+function isLearnedSkillBook(item) {
+  if (item?.effect !== "learn_skill" || !item.skill_id) return false;
+  const owner = state.roster.find((hero) => hero.classId === item.target);
+  return Boolean(owner?.learnedSkillIds.has(item.skill_id));
+}
+
+function canPurchaseShopItem(item) {
+  if (!canBuyItem(item) || isLearnedSkillBook(item)) return false;
+  if (item.effect === "learn_skill") {
+    const owner = state.roster.find((hero) => hero.classId === item.target);
+    const skill = state.data.characterSkills.find((candidate) => candidate.skill_id === item.skill_id && candidate.class_id === item.target);
+    return Boolean(owner && skill && owner.level >= Number(item.buy_level) && owner.level >= Number(skill.level));
+  }
+  const highestLevel = Math.max(...state.roster.map((hero) => hero.level));
+  return highestLevel >= Number(item.buy_level);
+}
+
+function normalizedShopQuantity(value, maximum = 999) {
+  const quantity = Math.trunc(Number(value));
+  const limit = Math.min(Math.max(1, Math.trunc(Number(maximum) || 1)), 999);
+  if (!Number.isFinite(quantity) || quantity < 1 || quantity > limit) return null;
+  return quantity;
+}
+
+function buyInventoryItem(itemId, requestedQuantity = 1) {
+  const item = state.data.item.find((candidate) => candidate.item_id === itemId);
+  const price = Number(item?.buy_gold ?? item?.buy_money);
+  const quantity = item?.effect === "learn_skill" || !BULK_SHOP_EFFECTS.has(item?.effect) ? 1 : normalizedShopQuantity(requestedQuantity);
+  const totalPrice = quantity === null ? NaN : price * quantity;
+  if (!item || !canPurchaseShopItem(item) || !Number.isFinite(price) || price < 0 || !Number.isFinite(totalPrice) || state.gold < totalPrice) return false;
+  state.gold -= totalPrice;
+  addInventoryItem(item.item_id, item.item_name, quantity);
+  addLog(`商店購買 ${item.item_name} × ${quantity}，花費 ${totalPrice} 金幣。`);
+  render();
+  persistPlayerSave();
+  return true;
+}
+
+function sellInventoryItem(identifier, requestedQuantity = 1) {
+  const exactIndex = state.inventory.findIndex((entry) => entry.key === identifier || entry.itemUuid === identifier);
+  const fallbackIndex = exactIndex >= 0 ? exactIndex : state.inventory.findIndex((entry) => entry.itemId === identifier);
+  const inventoryItem = state.inventory[fallbackIndex];
+  const itemData = catalogItem(inventoryItem?.itemId);
+  const price = itemSellPrice(itemData);
+  const available = inventoryItem?.isEquipment ? 1 : Math.max(1, Math.trunc(Number(inventoryItem?.quantity) || 1));
+  const allowedQuantity = !inventoryItem?.isEquipment && BULK_SHOP_EFFECTS.has(itemData?.effect) ? requestedQuantity : 1;
+  const quantity = normalizedShopQuantity(allowedQuantity, available);
+  if (fallbackIndex < 0 || inventoryItem?.locked || price === null || quantity === null
+    || (inventoryItem?.isEquipment && normalizeEnhancement(inventoryItem).level >= 1)) return false;
+  if (available > quantity) inventoryItem.quantity = available - quantity;
+  else state.inventory.splice(fallbackIndex, 1);
+  state.gold += price * quantity;
+  addLog(`商店收購 ${itemData.item_name} × ${quantity}，獲得 ${price * quantity} 金幣。`);
+  render();
+  persistPlayerSave();
+  return true;
+}
+
+function equipmentRecycleGold(item, instance) {
+  const itemLevel = Math.max(0, Number(item?.item_level) || 0);
+  const enhanceLevel = normalizeEnhancement(instance).level;
+  return Math.max(0, Math.round(Number(systemSettings().base_enhance_cost) * (1 + itemLevel / 10) * enhanceLevel));
+}
+
+function totalPartyLuck() {
+  return Math.max(0, state.party.reduce((sum, hero) => sum + Number(hero ? combatStat(hero, "LUK") : 0), 0));
+}
+
+function rollRecoveredStoneCount(eventCount, luck, random = Math.random) {
+  const guaranteedRerolls = Math.floor(Math.max(0, luck) / 100);
+  const fractionalUnlockChance = Math.max(0, luck) % 100;
+  let recovered = 0;
+  const recoverRate = clamp(Number(systemSettings().recover_rate), 0, 100);
+  for (let eventIndex = 0; eventIndex < Math.max(0, Math.trunc(eventCount)); eventIndex += 1) {
+    let success = random() * 100 < recoverRate;
+    for (let reroll = 0; !success && reroll < guaranteedRerolls; reroll += 1) success = random() * 100 < recoverRate;
+    if (!success && fractionalUnlockChance > 0 && random() * 100 < fractionalUnlockChance) success = random() * 100 < recoverRate;
+    if (success) recovered += 1;
+  }
+  return recovered;
+}
+
+function recycleInventoryEquipment(identifier, random = Math.random) {
+  const inventoryIndex = state.inventory.findIndex((entry) => entry.key === identifier || entry.itemUuid === identifier);
+  const instance = state.inventory[inventoryIndex];
+  const item = instance?.isEquipment ? state.data.equipment.find((candidate) => candidate.item_id === instance.itemId) : null;
+  const enhancement = instance ? normalizeEnhancement(instance) : null;
+  if (inventoryIndex < 0 || !item || instance.locked || enhancement.level < 1) return false;
+
+  const gold = equipmentRecycleGold(item, instance);
+  const recovered = { bless: 0, curse: 0, chaos: 0 };
+  if (enhancement.level >= 5) {
+    const luck = totalPartyLuck();
+    recovered.bless = rollRecoveredStoneCount(enhancement.blessCount, luck, random);
+    recovered.curse = rollRecoveredStoneCount(enhancement.curseCount, luck, random);
+    recovered.chaos = rollRecoveredStoneCount(enhancement.chaosCount, luck, random);
+  }
+
+  state.inventory.splice(inventoryIndex, 1);
+  state.gold += gold;
+  const stoneIds = { bless: "sp0101", curse: "sp0201", chaos: "sp0301" };
+  const recoveredText = [];
+  for (const [type, quantity] of Object.entries(recovered)) {
+    if (quantity <= 0) continue;
+    const stone = state.data.item.find((candidate) => candidate.item_id === stoneIds[type]);
+    addInventoryItem(stone.item_id, stone.item_name, quantity);
+    recoveredText.push(`${stone.item_name} x ${quantity}`);
+  }
+  const displayName = equipmentDisplayName(item, instance);
+  addLog(`${displayName} 已經被回收，回收 ${gold.toLocaleString()} 金幣${recoveredText.length ? `，並成功提取 ${recoveredText.join("、")}` : ""}。`, {
+    messageColor: indexedColor("right_equipment_recover", "#00FFFF"),
+  });
+  render();
+  persistPlayerSave();
+  return { gold, recovered, itemId: item.item_id };
+}
+
+function toggleInventoryLock(identifier) {
+  const inventoryItem = state.inventory.find((entry) => entry.key === identifier || entry.itemUuid === identifier)
+    ?? state.inventory.find((entry) => entry.itemId === identifier);
+  if (!inventoryItem) return false;
+  const locked = !inventoryItem.locked;
+  const affectedItems = inventoryItem.isEquipment
+    ? [inventoryItem]
+    : state.inventory.filter((entry) => !entry.isEquipment && entry.itemId === inventoryItem.itemId);
+  for (const entry of affectedItems) entry.locked = locked;
+  if (!locked && state.autoSellItemIds.has(inventoryItem.itemId)) autoSellExistingInventory(inventoryItem.itemId);
+  renderShop();
+  persistPlayerSave();
+  return locked;
+}
+
+function toggleEquipmentLock(identifier) {
+  return toggleInventoryLock(identifier);
+}
+
+function renderShop() {
+  const container = $("#shop-list");
+  if (!container || !state.data) return;
+  const highestLevel = Math.max(...state.roster.map((hero) => hero.level));
+  const purchasable = state.data.item.filter(canPurchaseShopItem);
+  const inventorySignature = state.inventory.map((entry) => [
+    entry.key, entry.itemUuid, entry.itemId, entry.quantity,
+    entry.enhancement?.level ?? 0, entry.locked ? 1 : 0,
+  ].join(":")).join("|");
+  const signature = state.shopMode === "buy"
+    ? `buy:${highestLevel}:${purchasable.map((item) => `${item.item_id}:${item.buy_gold ?? item.buy_money}`).join("|")}`
+    : state.shopMode === "auto-sell"
+      ? `auto-sell:${[...state.autoSellItemIds].sort().join("|")}:${inventorySignature}`
+      : state.shopMode === "recycle"
+        ? `recycle:${state.gold}:${inventorySignature}:${totalPartyLuck()}`
+      : `sell:${inventorySignature}`;
+  if (container.dataset.renderSignature === signature) {
+    if (state.shopMode === "buy") {
+      for (const button of container.querySelectorAll("[data-buy-item-id]")) {
+        const item = state.data.item.find((candidate) => candidate.item_id === button.dataset.buyItemId);
+        button.disabled = !item || state.gold < Number(item.buy_gold ?? item.buy_money);
+      }
+    }
+    return;
+  }
+  container.dataset.renderSignature = signature;
+  container.replaceChildren();
+  container.classList.toggle("auto-sell-grid", state.shopMode === "auto-sell");
+  if (state.shopMode === "buy") {
+    if (!purchasable.length) {
+      const empty = document.createElement("p"); empty.className = "shop-empty"; empty.textContent = "目前沒有可購買的物品"; container.append(empty); return;
+    }
+    for (const item of purchasable) {
+      const price = Number(item.buy_gold ?? item.buy_money);
+      const row = document.createElement("div"); row.className = "shop-row"; row.title = itemTooltip(item);
+      const copy = document.createElement("span"); copy.textContent = item.item_name;
+      const detail = document.createElement("small"); detail.textContent = `需求 Lv.${item.buy_level}`; copy.append(detail);
+      const actions = document.createElement("div"); actions.className = "shop-actions";
+      let quantityInput = null;
+      if (BULK_SHOP_EFFECTS.has(item.effect)) {
+        quantityInput = document.createElement("input"); quantityInput.type = "number"; quantityInput.min = "1"; quantityInput.max = "999"; quantityInput.step = "1"; quantityInput.value = "1";
+        quantityInput.setAttribute("aria-label", `購買 ${item.item_name} 數量`);
+      }
+      const button = document.createElement("button"); button.type = "button"; button.dataset.buyItemId = item.item_id; button.textContent = quantityInput ? "購買" : `購買　-${price}`; button.disabled = state.gold < price;
+      button.setAttribute("aria-label", `購買 ${item.item_name}，花費 ${price} 金幣`);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        const quantity = quantityInput ? quantityInput.value : 1;
+        if (!buyInventoryItem(item.item_id, quantity)) addLog(`${item.item_name} 購買失敗，請確認數量、等級與金幣。`);
+      });
+      if (quantityInput) {
+        actions.append(quantityInput, button);
+        row.append(copy, actions);
+      } else row.append(copy, button);
+      container.append(row);
+    }
+    return;
+  }
+  if (state.shopMode === "auto-sell") {
+    const entries = autoSellCatalogEntries();
+    if (!entries.length) {
+      const empty = document.createElement("p"); empty.className = "shop-empty"; empty.textContent = "背包中沒有可設定自動賣出的物品或 +0 裝備"; container.append(empty); return;
+    }
+    for (const { item, quantity } of entries) {
+      const price = itemSellPrice(item);
+      const row = document.createElement("label"); row.className = "auto-sell-row";
+      if (state.data.equipment.includes(item)) assignEquipmentTooltip(row, item, "", null);
+      else row.title = itemTooltip(item);
+      const copy = document.createElement("span"); copy.textContent = item.item_name;
+      const detail = document.createElement("small"); detail.textContent = `持有 ${quantity}｜每個 ${price} 金幣`; copy.append(detail);
+      const input = document.createElement("input"); input.type = "checkbox"; input.checked = state.autoSellItemIds.has(item.item_id);
+      input.setAttribute("aria-label", `自動賣出 ${item.item_name}`);
+      input.addEventListener("change", () => setAutoSellRule(item.item_id, input.checked));
+      row.append(copy, input); container.append(row);
+    }
+    return;
+  }
+  if (state.shopMode === "recycle") {
+    const entries = state.inventory
+      .filter((entry) => entry.isEquipment && normalizeEnhancement(entry).level >= 1)
+      .map((instance) => ({
+        instance,
+        item: state.data.equipment.find((candidate) => candidate.item_id === instance.itemId),
+        identifier: instance.itemUuid || instance.key,
+      }))
+      .filter(({ item }) => item);
+    if (!entries.length) {
+      const empty = document.createElement("p"); empty.className = "shop-empty"; empty.textContent = "背包中沒有可回收的 +1 以上裝備"; container.append(empty); return;
+    }
+    for (const { item, instance, identifier } of entries) {
+      const gold = equipmentRecycleGold(item, instance);
+      const row = document.createElement("div"); row.className = "shop-row recycle-shop-row";
+      assignEquipmentTooltip(row, item, "", instance);
+      const copy = document.createElement("span"); copy.textContent = equipmentDisplayName(item, instance);
+      const detail = document.createElement("small"); detail.textContent = `回收 ${gold.toLocaleString()} 金幣${normalizeEnhancement(instance).level >= 5 ? "｜可能提取 Lv.1 強化石" : ""}`; copy.append(detail);
+      const lock = document.createElement("button"); lock.type = "button"; lock.className = `equipment-lock${instance.locked ? " active" : ""}`;
+      lock.textContent = "🔒"; lock.title = instance.locked ? "已鎖定，點擊解除後才能回收" : "未鎖定，點擊保護";
+      lock.setAttribute("aria-label", `${instance.locked ? "解除鎖定" : "鎖定"} ${item.item_name}`);
+      lock.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); toggleInventoryLock(identifier); });
+      const button = document.createElement("button"); button.type = "button"; button.textContent = "回收"; button.disabled = Boolean(instance.locked);
+      button.setAttribute("aria-label", `回收 ${equipmentDisplayName(item, instance)}，獲得 ${gold} 金幣`);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (!recycleInventoryEquipment(identifier)) addLog(`${item.item_name} 回收失敗，請確認裝備仍在背包且未鎖定。`);
+      });
+      row.append(lock, copy, button); container.append(row);
+    }
+    return;
+  }
+  const stacks = new Map();
+  const sellable = [];
+  for (const entry of state.inventory) {
+    const item = catalogItem(entry.itemId);
+    if (!item || itemSellPrice(item) === null) continue;
+    if (entry.isEquipment) {
+      if (normalizeEnhancement(entry).level >= 1) continue;
+      sellable.push({ item, quantity: 1, identifier: entry.itemUuid || entry.key, instance: entry });
+    }
+    else {
+      const existing = stacks.get(entry.itemId);
+      stacks.set(entry.itemId, {
+        item,
+        quantity: (existing?.quantity ?? 0) + Math.max(1, entry.quantity ?? 1),
+        identifier: entry.itemId,
+        instance: existing?.instance ?? entry,
+      });
+    }
+  }
+  sellable.unshift(...stacks.values());
+  if (!sellable.length) {
+    const empty = document.createElement("p"); empty.className = "shop-empty"; empty.textContent = "目前沒有可賣出的物品"; container.append(empty); return;
+  }
+  for (const { item, quantity, identifier, instance } of sellable) {
+    const price = itemSellPrice(item);
+    const row = document.createElement("div"); row.className = "shop-row sell-shop-row";
+    if (state.data.equipment.includes(item)) assignEquipmentTooltip(row, item, "", instance);
+    else row.title = itemTooltip(item);
+    const copy = document.createElement("span"); copy.textContent = `${instance?.isEquipment ? equipmentDisplayName(item, instance) : item.item_name} × ${quantity}`;
+    const button = document.createElement("button"); button.type = "button"; button.textContent = `賣出 1 個　+${price}`;
+    button.disabled = Boolean(instance?.locked);
+    button.setAttribute("aria-label", `賣出 ${item.item_name} 1 個，獲得 ${price} 金幣`);
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (!sellInventoryItem(identifier)) addLog(`${item.item_name} 販賣失敗，請確認背包與售價。`);
+    });
+    const actions = document.createElement("div"); actions.className = "shop-actions"; actions.append(button);
+    if (!instance?.isEquipment && BULK_SHOP_EFFECTS.has(item.effect)) {
+      const quantityInput = document.createElement("input"); quantityInput.type = "number"; quantityInput.min = "1"; quantityInput.max = String(quantity); quantityInput.step = "1"; quantityInput.value = String(quantity);
+      quantityInput.setAttribute("aria-label", `賣出 ${item.item_name} 數量`);
+      const quantityButton = document.createElement("button"); quantityButton.type = "button"; quantityButton.textContent = "販賣指定數量"; quantityButton.disabled = Boolean(instance?.locked);
+      quantityButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (!sellInventoryItem(identifier, quantityInput.value)) addLog(`${item.item_name} 販賣失敗，請確認數量與鎖定狀態。`);
+      });
+      actions.append(quantityInput, quantityButton);
+    }
+    if (instance) {
+      const lock = document.createElement("button"); lock.type = "button"; lock.className = `equipment-lock${instance.locked ? " active" : ""}`;
+      lock.textContent = "🔒";
+      lock.title = instance.locked ? "已鎖定，點擊解除" : "未鎖定，點擊保護";
+      lock.setAttribute("aria-label", `${instance.locked ? "解除鎖定" : "鎖定"} ${item.item_name}`);
+      lock.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); toggleInventoryLock(identifier); });
+      row.append(lock);
+    }
+    row.append(copy, actions); container.append(row);
+  }
+}
+
+function buildMapSelect() {
+  const select = $("#map-select");
+  for (const map of state.data.map) {
+    const option = document.createElement("option"); option.value = map.map_id; option.textContent = map.map_id === "town001" ? map.name : `${map.name}（Lv.${map.unlock_level}）`;
+    select.append(option);
+  }
+  updateMapLocks();
+  select.addEventListener("change", () => chooseMap(select.value));
+}
+
+function updateMapLocks() {
+  const highestLevel = Math.max(...state.party.map((hero) => hero.level));
+  for (const option of $("#map-select").options) {
+    const map = state.data.map.find((row) => row.map_id === option.value);
+    option.disabled = Boolean(map && map.map_id !== "town001" && map.unlock_level > highestLevel);
+  }
+}
+
+function mapMonsterNames(mapId) {
+  return [...new Set(state.data.mapSpawn.filter((row) => row.map_id === mapId)
+    .map((row) => state.data.monsters.find((monster) => monster.monster_id === row.monster_id)?.name ?? row.monster_id))];
+}
+
+function chooseMap(mapId, townAutoReturn = false) {
+  const map = state.data.map.find((row) => row.map_id === mapId);
+  if (!map) return;
+  if (map.map_id === "town001") {
+    enterTown(townAutoReturn);
+    render();
+    return;
+  }
+  state.map = map;
+  state.townAutoReturn = false;
+  state.previousMapId = mapId;
+  $("#map-select").disabled = false;
+  $("#map-select").value = mapId;
+  state.enemies = []; state.spawnElapsed = state.map.spawn_cd;
+  addLog(`進入 ${state.map.name}；這裡有：${mapMonsterNames(mapId).join("、")}`); spawnMonster(); render();
+}
+
+function weightedMonster() {
+  const rows = state.data.mapSpawn.filter((row) => row.map_id === state.map.map_id);
+  let roll = Math.random() * rows.reduce((sum, row) => sum + row.spawn_rate, 0);
+  for (const row of rows) { roll -= row.spawn_rate; if (roll < 0) return state.data.monsters.find((m) => m.monster_id === row.monster_id); }
+  return state.data.monsters.find((m) => m.monster_id === rows.at(-1).monster_id);
+}
+
+function spawnMonster() {
+  if (!state.map || state.map.map_id === "town001" || state.enemies.length >= state.map.max_monsters) return;
+  const source = weightedMonster();
+  const configuredSkills = monsterConfiguredSkills(source.monster_id);
+  state.enemies.push({ ...source, id: `${source.monster_id}-${crypto.randomUUID()}`, maxHp: source.HP, hp: source.HP, cooldown: 0,
+    skillCooldowns: Object.fromEntries(configuredSkills.map(({ use }) => [use.skill_id, use.initial_delay])), casting: null, buffs: [] });
+  state.spawnElapsed = 0; addLog(`${source.name} 出現在隊伍後方。`, { channel: "monster" });
+}
+
+function loop(now) {
+  const dt = Math.min(.25, (now - state.lastTime) / 1000); state.lastTime = now;
+  if (!state.paused) update(dt);
+  render(); requestAnimationFrame(loop);
+}
+
+function update(dt) {
+  state.elapsed += dt; state.spawnElapsed += dt;
+  for (const hero of state.roster) updateItemCooldowns(hero, dt);
+  if (state.map?.map_id === "town001") {
+    updateTownRecovery(dt);
+    if (state.townAutoReturn && allRosterRestored()) returnFromTown();
+    return;
+  }
+  if (!livingParty().length) { enterTown(); return; }
+  if (!state.enemies.length) spawnMonster();
+  else if (state.spawnElapsed >= state.map.spawn_cd) spawnMonster();
+  for (const actor of livingParty()) {
+    applyRegeneration(actor, dt);
+    if (actor.hp <= 0) continue;
+    maybeAutoUseRecovery(actor);
+    updateHeroAction(actor, dt);
+  }
+  for (const enemy of [...state.enemies]) {
+    if (enemy.hp <= 0) continue;
+    enemy.hp = clamp(roundSigned(enemy.hp + combatStat(enemy, "HPR") * dt), 0, enemy.maxHp);
+    if (enemy.hp <= 0) { defeatMonster(enemy); continue; }
+    updateMonsterAction(enemy, dt);
+  }
+}
+
+function monsterConfiguredSkills(monsterId) {
+  return state.data.monsterSkills
+    .filter((use) => use.monster_id === monsterId)
+    .map((use) => ({ use, skill: state.data.skill.find((skill) => skill.skill_id === use.skill_id) }))
+    .filter(({ skill }) => skill)
+    .sort((a, b) => a.use.use_priority - b.use.use_priority || a.use.skill_order - b.use.skill_order);
+}
+
+function monsterActionInterval(enemy) {
+  const attacksPerSecond = Math.max(.05, enemy.attack_speed * (1 + combatStat(enemy, "ASPD") / 100));
+  return 1 / attacksPerSecond;
+}
+
+function monsterTriggerTargets(side) {
+  if (side === "ally") return state.enemies.filter((target) => target.hp > 0);
+  if (side === "enemy") return livingParty();
+  return [];
+}
+
+function resourceRatio(unit, stat) {
+  const currentKey = stat.toLowerCase();
+  const maximumKey = `max${stat[0]}${stat.slice(1).toLowerCase()}`;
+  const maximum = Number(unit[maximumKey]);
+  if (!(maximum > 0)) return null;
+  return Number(unit[currentKey]) / maximum * 100;
+}
+
+function monsterSkillTriggerSatisfied(use) {
+  if (use.trigger_condition === "always") return true;
+  const match = String(use.trigger_condition ?? "").match(/^(ally|enemy)_(HP|MP)_below_(\d+(?:\.\d+)?)$/i);
+  if (!match) return false;
+  const [, side, stat, thresholdText] = match;
+  const threshold = Number(thresholdText);
+  return monsterTriggerTargets(side.toLowerCase()).some((target) => {
+    const ratio = resourceRatio(target, stat.toUpperCase());
+    return ratio !== null && ratio < threshold;
+  });
+}
+
+function updateMonsterAction(enemy, dt) {
+  enemy.cooldown -= dt;
+  for (const skillId of Object.keys(enemy.skillCooldowns ?? {})) enemy.skillCooldowns[skillId] = Math.max(0, enemy.skillCooldowns[skillId] - dt);
+  enemy.buffs = (enemy.buffs ?? []).map((buff) => ({ ...buff, remaining: buff.remaining - dt })).filter((buff) => buff.remaining > 0);
+  if (enemy.casting) {
+    enemy.casting.remaining -= dt;
+    if (enemy.casting.remaining <= 0) {
+      const { skill, skillColor } = enemy.casting; enemy.casting = null;
+      executeMonsterSkill(enemy, skill, skillColor); enemy.cooldown = Math.max(enemy.cooldown, monsterActionInterval(enemy));
+    }
+    return;
+  }
+  if (enemy.cooldown > 0) return;
+  const configured = monsterConfiguredSkills(enemy.monster_id)
+    .find(({ use }) => monsterSkillTriggerSatisfied(use) && (enemy.skillCooldowns[use.skill_id] ?? 0) <= 0);
+  if (configured) { startMonsterSkill(enemy, configured); return; }
+  const target = frontParty();
+  if (target) monsterAttack(enemy, target);
+  enemy.cooldown += monsterActionInterval(enemy);
+}
+
+function startMonsterSkill(enemy, configured) {
+  const { use, skill } = configured;
+  const skillColor = csvColor(use.skill_color, "#ededed");
+  enemy.skillCooldowns[use.skill_id] = use.cooldown;
+  if (skill.cast_time > 0) {
+    enemy.casting = { skill, skillColor, remaining: skill.cast_time };
+    addLog(`${enemy.name} 開始施放 ${skill.name}。`, { channel: "monster", skillName: skill.name, skillColor });
+  } else {
+    executeMonsterSkill(enemy, skill, skillColor);
+    enemy.cooldown += monsterActionInterval(enemy);
+  }
+}
+
+function randomLivingTarget(targets) {
+  const living = targets.filter((target) => target.hp > 0);
+  return living.length ? [living[randomInt(0, living.length - 1)]] : [];
+}
+
+function selectCombatTargets(targets, targetType) {
+  const living = targets.filter((target) => target.hp > 0);
+  if (targetType === "aoe") return living;
+  if (targetType === "random") return randomLivingTarget(living);
+  if (["front", "middle", "last"].includes(targetType)) {
+    const index = { front: 0, middle: 1, last: 2 }[targetType];
+    return living[index] ? [living[index]] : randomLivingTarget(living);
+  }
+  if (targetType === "HPlower") return [...living].sort((a, b) => resourceRatio(a, "HP") - resourceRatio(b, "HP")).slice(0, 1);
+  if (targetType === "MPlower") return [...living]
+    .filter((target) => resourceRatio(target, "MP") !== null)
+    .sort((a, b) => resourceRatio(a, "MP") - resourceRatio(b, "MP"))
+    .slice(0, 1);
+  return [];
+}
+
+function monsterOpponentFormation() {
+  return [...state.party].reverse();
+}
+
+function monsterSkillTargets(skill) {
+  return selectCombatTargets(monsterOpponentFormation(), skill.damage_target);
+}
+
+function configuredSkillEffects(skill) {
+  return [1, 2].map((index) => ({
+    index,
+    stat: skill[`effect${index}`],
+    target: skill[`effect${index}_target`],
+    value: skill[`effect${index}_value`],
+    seconds: skill[`effect${index}_sec`],
+  })).filter((effect) => effect.stat);
+}
+
+function addTimedSkillEffect(target, skill, effect, value, sourceName) {
+  target.buffs ??= [];
+  const effectKey = `${skill.skill_id}:${effect.index}`;
+  target.buffs = target.buffs.filter((buff) => buff.effectKey !== effectKey);
+  target.buffs.push({ effectKey, skillId: skill.skill_id, name: skill.name, stat: effect.stat, value, remaining: effect.seconds, sourceName, skillName: skill.name });
+}
+
+function executeMonsterSkill(enemy, skill, skillColor) {
+  if (["physical", "magic"].includes(skill.damage_type)) {
+    for (const target of monsterSkillTargets(skill)) {
+      const avoidance = rollAttackAvoidance(enemy, target, skill.damage_type);
+      if (avoidance.dodged) { addLog(`${enemy.name} 的 ${skill.name} 被${avoidance.reason}。`, { channel: "monster", skillName: skill.name, skillColor }); continue; }
+      const result = calculateAttackDamage(enemy, target, skill.damage_type, skill.base_damage, skill.multiplier / 100);
+      target.hp = round(target.hp - result.damage);
+      addLog(`${enemy.name} 使用 ${skill.name}，對 ${target.name} 造成 ${result.damage} 傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
+        { channel: "monster", skillName: skill.name, skillColor, critical: result.critical.isCritical, damage: result.damage });
+      if (target.hp <= 0) handleHeroDeath(target, { kind: "direct", sourceName: enemy.name, skillName: skill.name, damage: result.damage, critical: result.critical.isCritical });
+    }
+  }
+  if (skill.damage_type === "heal") {
+    const targets = skill.effect_target === "ally_aoe" ? state.enemies.filter((target) => target.hp > 0) : [enemy];
+    for (const target of targets) {
+      const result = calculateHeal(enemy, skill.base_damage, skill.multiplier / 100);
+      const restored = round(Math.min(result.amount, target.maxHp - target.hp)); target.hp = round(target.hp + restored);
+      addLog(`${enemy.name} 使用 ${skill.name}，恢復 ${target.name} ${restored} HP${result.critical.isCritical ? "（暴擊）" : ""}。`,
+        { channel: "monster", skillName: skill.name, skillColor, critical: result.critical.isCritical, damage: restored });
+    }
+  }
+  if (configuredSkillEffects(skill).length) applyMonsterSkillEffects(enemy, skill, skillColor);
+}
+
+function monsterEffectTargets(enemy, targetType) {
+  if (targetType === "self") return [enemy];
+  if (targetType === "ally_aoe") return state.enemies.filter((target) => target.hp > 0);
+  if (targetType === "enemy_aoe") return livingParty();
+  return selectCombatTargets(monsterOpponentFormation(), targetType);
+}
+
+function skillEffectTargetLabel(targetType, targets) {
+  if (targetType === "self") return "自己";
+  if (targetType === "ally_aoe") return "友方全體人員";
+  if (targetType === "enemy_aoe") return "敵方全體成員";
+  return targets.map((target) => target.name).join("、");
+}
+
+function logAppliedSkillEffect(casterName, skill, effect, value, targets, skillColor, channel) {
+  if (!targets.length) return;
+  const targetLabel = skillEffectTargetLabel(effect.target, targets);
+  addLog(`${casterName} 的 ${skill.name} 對 ${targetLabel} 造成 ${effect.stat} ${value >= 0 ? "+" : ""}${formatEnhancementValue(effect.stat, value)} 效果，持續 ${formatExactNumber(effect.seconds)} 秒。`,
+    { channel, skillName: skill.name, skillColor });
+}
+
+function applyMonsterSkillEffects(enemy, skill, skillColor) {
+  for (const effect of configuredSkillEffects(skill)) {
+    const targets = monsterEffectTargets(enemy, effect.target);
+    const value = Number(effect.value) || 0;
+    for (const target of targets) addTimedSkillEffect(target, skill, effect, value, enemy.name);
+    logAppliedSkillEffect(enemy.name, skill, effect, value, targets, skillColor, "monster");
+  }
+}
+
+function updateItemCooldowns(hero, dt) {
+  for (const itemId of Object.keys(hero.itemCooldowns ?? {})) hero.itemCooldowns[itemId] = Math.max(0, hero.itemCooldowns[itemId] - dt);
+}
+
+function maybeAutoUseRecovery(hero) {
+  const settings = hero.recoverySettings ?? { hpEnabled: true, hpPercent: 20, hpItemId: null, mpEnabled: true, mpPercent: 20, mpItemId: null };
+  if (settings.hpEnabled && hero.hp < hero.maxHp && hero.hp / hero.maxHp * 100 <= settings.hpPercent) tryAutoRecoveryEffect(hero, "HPrecover", settings.hpItemId);
+  if (settings.mpEnabled && hero.mp < hero.maxMp && hero.maxMp > 0 && hero.mp / hero.maxMp * 100 <= settings.mpPercent) tryAutoRecoveryEffect(hero, "MPrecover", settings.mpItemId);
+}
+
+function tryAutoRecoveryEffect(hero, effect, selectedItemId = null) {
+  const item = state.data.item.find((candidate) => (!selectedItemId || candidate.item_id === selectedItemId)
+    && candidate.effect === effect
+    && hasValidItemCooldown(candidate)
+    && state.inventory.some((entry) => entry.itemId === candidate.item_id));
+  if (!item || (hero.itemCooldowns[item.item_id] ?? 0) > 0) return false;
+  return useRecoveryItem(hero, item, true).used;
+}
+
+function livingParty() { return state.party.filter((p) => p.hp > 0); }
+function frontParty() { return [...state.party].reverse().find((p) => p.hp > 0); }
+
+function enterTown(automatic = true) {
+  const town = state.data.map.find((map) => map.map_id === "town001");
+  if (!town) return;
+  if (state.map?.map_id !== "town001") state.previousMapId = state.map?.map_id ?? state.previousMapId;
+  state.map = town;
+  state.townAutoReturn = Boolean(automatic);
+  state.enemies = [];
+  state.spawnElapsed = 0;
+  const select = typeof document === "undefined" ? null : $("#map-select");
+  if (select) { select.value = town.map_id; select.disabled = false; }
+  addLog(automatic
+    ? `隊伍全滅，返回 ${town.name}。五名角色開始復活與恢復。`
+    : `隊伍前往 ${town.name}。將留在村莊，直到玩家自行選擇其他地圖。`);
+}
+
+function updateTownRecovery(dt) {
+  if (dt <= 0) return;
+  const townRate = clamp(Number(systemSettings().town_recover) || 0, 0, 100) / 100;
+  for (const hero of state.roster) {
+    hero.buffs = (hero.buffs ?? []).map((buff) => ({ ...buff, remaining: buff.remaining - dt })).filter((buff) => buff.remaining > 0);
+    const hpRecovery = hero.maxHp * townRate + combatStat(hero, "HPR");
+    const mpRecovery = hero.maxMp * townRate + combatStat(hero, "MPR");
+    hero.hp = clamp(roundSigned(hero.hp + hpRecovery * dt), 0, hero.maxHp);
+    hero.mp = clamp(roundSigned(hero.mp + mpRecovery * dt), 0, hero.maxMp);
+  }
+}
+
+function allRosterRestored() {
+  return state.roster.length > 0 && state.roster.every((hero) => hero.hp >= hero.maxHp && hero.mp >= hero.maxMp);
+}
+
+function returnFromTown() {
+  const destination = state.data.map.find((map) => map.map_id === state.previousMapId && map.map_id !== "town001")
+    ?? state.data.map.find((map) => map.map_id !== "town001" && map.max_monsters > 0);
+  if (!destination) return;
+  state.map = destination;
+  state.townAutoReturn = false;
+  state.enemies = [];
+  state.spawnElapsed = destination.spawn_cd;
+  const select = typeof document === "undefined" ? null : $("#map-select");
+  if (select) { select.disabled = false; select.value = destination.map_id; }
+  addLog(`五名角色的 HP、MP 已全滿，自動返回 ${destination.name}。`);
+  spawnMonster();
+}
+
+function applyRegeneration(actor, dt) {
+  if (actor.hp <= 0 || dt <= 0) return;
+  const wasAlive = actor.hp > 0;
+  const harmfulHpr = [...(actor.buffs ?? [])].reverse().find((buff) => buff.stat === "HPR" && Number(buff.value) < 0);
+  const currentHpr = combatStat(actor, "HPR");
+  const equipmentHpr = equipmentStatContribution(actor, "HPR");
+  const equipmentCausedHprDrain = currentHpr < 0 && equipmentHpr < 0 && currentHpr - equipmentHpr >= 0;
+  actor.hp = clamp(roundSigned(actor.hp + currentHpr * dt), 0, actor.maxHp);
+  actor.mp = clamp(roundSigned(actor.mp + combatStat(actor, "MPR") * dt), 0, actor.maxMp);
+  if (wasAlive && actor.hp <= 0) handleHeroDeath(actor, equipmentCausedHprDrain
+    ? { kind: "equipment-hpr" }
+    : { kind: "continuous", buff: harmfulHpr });
+}
+
+function updateHeroAction(actor, dt) {
+  actor.cooldown -= dt;
+  for (const skillId of Object.keys(actor.skillCooldowns)) actor.skillCooldowns[skillId] = Math.max(0, actor.skillCooldowns[skillId] - dt);
+  actor.buffs = actor.buffs.map((buff) => ({ ...buff, remaining: buff.remaining - dt })).filter((buff) => buff.remaining > 0);
+  if (actor.casting) {
+    actor.casting.remaining -= dt;
+    if (actor.casting.remaining <= 0) {
+      const skill = actor.casting.skill; actor.casting = null;
+      executeHeroSkill(actor, skill); actor.cooldown = Math.max(actor.cooldown, heroActionInterval(actor));
+    }
+    return;
+  }
+  if (actor.cooldown > 0 || !state.enemies[0]) return;
+  const skill = selectHeroSkill(actor);
+  if (skill) startHeroSkill(actor, skill);
+  else actor.cooldown += .1;
+}
+
+function heroActionInterval(actor) {
+  const actionsPerSecond = Math.max(.05, 1 + combatStat(actor, "ASPD") / 100);
+  return 1 / actionsPerSecond;
+}
+
+function selectHeroSkill(actor) {
+  return [...classSkills(actor)].sort((a, b) => a.use_priority - b.use_priority || skillIdOrder(a) - skillIdOrder(b)).find((skill) => actor.learnedSkillIds.has(skill.skill_id)
+    && actor.skillEnabled[skill.skill_id] !== false
+    && actor.level >= skill.level
+    && actor.mp >= skill.cost
+    && actor.mp > ensureSkillSetting(actor, skill).mpThreshold
+    && (actor.skillCooldowns[skill.skill_id] ?? 0) <= 0
+    && skillTriggerMet(actor, skill));
+}
+
+function skillTriggerMet(actor, skill) {
+  const setting = ensureSkillSetting(actor, skill);
+  if (skill.damage_target === "aoe" && state.enemies.filter((enemy) => enemy.hp > 0).length < setting.enemyCountThreshold) return false;
+  if (skill.damage_type === "heal" || ["ally_hp_below", "ally_mp_below"].includes(skill.trigger_type)) {
+    const resource = skill.trigger_type === "ally_mp_below" ? "MP" : "HP";
+    const count = livingParty().filter((hero) => {
+      const ratio = resourceRatio(hero, resource);
+      return ratio !== null && ratio <= setting.triggerValue;
+    }).length;
+    return count >= setting.minTargets;
+  }
+  return !skill.trigger_type;
+}
+
+function startHeroSkill(actor, skill) {
+  actor.mp = round(actor.mp - skill.cost);
+  actor.skillCooldowns[skill.skill_id] = skill.cooldown;
+  if (skill.cast_time > 0) {
+    actor.casting = { skill, remaining: skill.cast_time };
+    addLog(`${actor.name} 開始施放 ${skill.name}。`, { channel: "player", skillName: skill.name, skillColor: playerSkillLogColor(skill) });
+  } else {
+    executeHeroSkill(actor, skill); actor.cooldown += heroActionInterval(actor);
+  }
+}
+
+function executeHeroSkill(actor, skill) {
+  if (["physical", "magic"].includes(skill.damage_type)) executeDamageSkill(actor, skill);
+  else if (skill.damage_type === "heal") executeHealSkill(actor, skill);
+  else if (skill.damage_type === "buff") executeBuffSkill(actor, skill);
+}
+
+function skillTargets(skill) {
+  if (skill.damage_target === "ally_hpless") return [...livingParty()].sort((a, b) => resourceRatio(a, "HP") - resourceRatio(b, "HP")).slice(0, 1);
+  return selectCombatTargets(state.enemies, skill.damage_target);
+}
+
+function skillReferenceValue(actor, attribute) {
+  if (!attribute || attribute === "EXP") return 0;
+  const allowed = state.data?.attributeIndex?.some((row) => row.Attribute === attribute && row.Attribute !== "EXP");
+  if (!allowed) return 0;
+  return Number(combatStat(actor, attribute)) || 0;
+}
+
+function skillReferenceBonus(actor, skill) {
+  if (!skill.effect_Attribute || skill.effect_multi === null || skill.effect_multi === undefined) return 0;
+  return skillReferenceValue(actor, skill.effect_Attribute) * Number(skill.effect_multi);
+}
+
+function adjustedSkillBaseDamage(actor, skill) {
+  return Number(skill.base_damage || 0) + skillReferenceBonus(actor, skill);
+}
+
+function adjustedSkillEffectValue(actor, skill, effect) {
+  return Number(effect.value || 0) + skillReferenceBonus(actor, skill);
+}
+
+function executeDamageSkill(actor, skill) {
+  const targets = skillTargets(skill);
+  for (const target of targets) {
+    const avoidance = rollAttackAvoidance(actor, target, skill.damage_type);
+    if (avoidance.dodged) { addLog(`${actor.name} 的 ${skill.name} 被${avoidance.reason}。`, { channel: "player", skillName: skill.name, skillColor: playerSkillLogColor(skill) }); continue; }
+    const result = calculateAttackDamage(actor, target, skill.damage_type, adjustedSkillBaseDamage(actor, skill), skill.multiplier / 100);
+    target.hp = round(target.hp - result.damage);
+    addLog(`${actor.name} 使用 ${skill.name}，對 ${target.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
+      { channel: "player", skillName: skill.name, skillColor: playerSkillLogColor(skill), critical: result.critical.isCritical, damage: result.damage });
+    if (target.hp <= 0) defeatMonster(target);
+  }
+  applyHeroSkillEffects(actor, skill);
+}
+
+function executeHealSkill(actor, skill) {
+  for (const target of skillTargets(skill)) {
+    const result = calculateHeal(actor, skill.base_damage, skill.multiplier / 100);
+    const restored = round(Math.min(result.amount, target.maxHp - target.hp)); target.hp = round(target.hp + restored);
+    addLog(`${actor.name} 使用 ${skill.name}，恢復 ${target.name} ${restored} HP${result.critical.isCritical ? "（暴擊）" : ""}。`,
+      { channel: "player", skillName: skill.name, skillColor: playerSkillLogColor(skill), critical: result.critical.isCritical, damage: restored });
+  }
+  applyHeroSkillEffects(actor, skill);
+}
+
+function executeBuffSkill(actor, skill) {
+  applyHeroSkillEffects(actor, skill);
+}
+
+function heroEffectTargets(actor, targetType) {
+  if (targetType === "self") return [actor];
+  if (targetType === "ally_aoe") return livingParty();
+  if (targetType === "enemy_aoe") return state.enemies.filter((target) => target.hp > 0);
+  if (targetType === "ally_hpless") return [...livingParty()].sort((a, b) => resourceRatio(a, "HP") - resourceRatio(b, "HP")).slice(0, 1);
+  return selectCombatTargets(state.enemies, targetType);
+}
+
+function applyHeroSkillEffects(actor, skill) {
+  for (const effect of configuredSkillEffects(skill)) {
+    const targets = heroEffectTargets(actor, effect.target);
+    const value = adjustedSkillEffectValue(actor, skill, effect);
+    for (const target of targets) addTimedSkillEffect(target, skill, effect, value, actor.name);
+    logAppliedSkillEffect(actor.name, skill, effect, value, targets, playerSkillLogColor(skill), "player");
+  }
+}
+
+function playerAttack(actor, enemy) {
+  const isMagic = actor.attackType === "magic";
+  const damageType = isMagic ? "magic" : "physical";
+  const avoidance = rollAttackAvoidance(actor, enemy, damageType);
+  if (avoidance.dodged) { addLog(`${actor.name} 的攻擊被${avoidance.reason}。`, { channel: "player" }); return; }
+  const result = calculateAttackDamage(actor, enemy, damageType, 0, 1);
+  enemy.hp = round(enemy.hp - result.damage); addLog(`${actor.name} 對 ${enemy.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
+    { channel: "player", critical: result.critical.isCritical, damage: result.damage });
+  if (enemy.hp <= 0) defeatMonster(enemy);
+}
+
+function monsterAttack(enemy, target) {
+  const magic = enemy.attack_type === "magic";
+  const damageType = magic ? "magic" : "physical";
+  const avoidance = rollAttackAvoidance(enemy, target, damageType);
+  if (avoidance.dodged) { addLog(`${enemy.name} 的攻擊被${avoidance.reason}。`, { channel: "monster" }); return; }
+  const basicSkill = state.data.skill.find((skill) => skill.skill_id === (magic ? "sk002" : "sk001"));
+  const result = calculateAttackDamage(enemy, target, damageType, basicSkill?.base_damage ?? 0, basicSkill?.multiplier ? basicSkill.multiplier / 100 : 1);
+  target.hp = round(target.hp - result.damage); addLog(`${enemy.name} 攻擊前排 ${target.name}，造成 ${result.damage} 傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
+    { channel: "monster", critical: result.critical.isCritical, damage: result.damage });
+  if (target.hp <= 0) handleHeroDeath(target, { kind: "direct", sourceName: enemy.name, skillName: "攻擊", damage: result.damage, critical: result.critical.isCritical });
+}
+
+function clearHeroStatuses(hero) {
+  hero.buffs = [];
+  hero.casting = null;
+  recalculateHeroStats(hero);
+  hero.hp = 0;
+}
+
+function handleHeroDeath(hero, context = {}) {
+  if (!hero || hero.hp > 0) return false;
+  const buff = context.buff;
+  clearHeroStatuses(hero);
+  if (context.kind === "direct" && context.sourceName) {
+    addLog(`${context.sourceName}使用${context.skillName || "攻擊"}造成${formatExactNumber(context.damage)}點傷害，殺死了${hero.name}。`, {
+      channel: "player", skillName: context.skillName, critical: context.critical, damage: context.damage,
+    });
+  } else if (context.kind === "equipment-hpr") {
+    addLog(`${hero.name} 想要穿著鐵處女變強，沒想到他就這樣離開了大家。`, { channel: "player" });
+  } else if (context.kind === "continuous" && buff?.sourceName && (buff.skillName || buff.name)) {
+    addLog(`${buff.sourceName} 對${hero.name} 使用 ${buff.skillName || buff.name} 造成了持續性傷害以致死亡。`, {
+      channel: "player", skillName: buff.skillName || buff.name,
+    });
+  } else {
+    addLog(`${hero.name}受到神秘力量導致 HP 持續降低的影響而安靜的倒下了。`, { channel: "player" });
+  }
+  return true;
+}
+
+function defeatMonster(enemy) {
+  const index = state.enemies.findIndex((e) => e.id === enemy.id); if (index < 0) return;
+  state.enemies.splice(index, 1);
+  const gold = multipliedGoldReward(randomInt(enemy.gold_min, enemy.gold_max));
+  state.gold += gold;
+  const sharedExp = Math.ceil(enemy.level * 10 / 3);
+  for (const hero of livingParty()) {
+    const overLevel = hero.level - enemy.level;
+    const rate = overLevel <= 3 ? 1 : clamp(1 - (overLevel - 3) * .1, 0, 1);
+    const penalizedExp = Math.ceil(sharedExp * rate);
+    gainExperience(hero, multipliedExperienceReward(penalizedExp));
+  }
+  rollDrops(enemy); addLog(`${enemy.name} 被擊倒，獲得 ${gold} 金幣。`, { channel: "monster" });
+  if (!state.enemies.length) spawnMonster();
+}
+
+function requiredExpFor(level) {
+  return state.data.playerLevel.find((row) => row.level === level)?.required_exp ?? null;
+}
+
+function gainExperience(hero, amount) {
+  if (hero.level >= 100 || amount <= 0) return;
+  hero.exp += amount;
+  let leveled = false;
+  while (hero.level < 100) {
+    const required = requiredExpFor(hero.level);
+    if (!required || hero.exp < required) break;
+    hero.exp -= required;
+    hero.level += 1;
+    applyLevelGrowth(hero);
+    leveled = true;
+    addLog(`${hero.name} 升到 Lv.${hero.level}。`);
+  }
+  if (hero.level >= 100) hero.exp = 0;
+  if (leveled) { updateMapLocks(); updateCharacterControls(); }
+}
+
+function applyLevelGrowth(hero) {
+  const oldMaxHp = hero.maxHp;
+  const oldMaxMp = hero.maxMp;
+  for (const key of ATTRIBUTE_KEYS) hero.attributes[key] += hero.levelPlan[key];
+  const attr = effectiveAttributes(hero);
+  const rolled = [];
+  for (const rule of state.data.characterAttribute) {
+    if (!rule.Enhance_Attribute || rule.Enhance_min === null || rule.Enhance_max === null) continue;
+    const amount = rollAttributeGrowth(attr[rule.Attribute] ?? 0, attr.LUK ?? 0, rule.Enhance_min, rule.Enhance_max);
+    hero.growthStats[rule.Enhance_Attribute] = round((hero.growthStats[rule.Enhance_Attribute] ?? 0) + amount);
+    rolled.push(`${rule.Enhance_Attribute} Roll +${amount}`);
+  }
+  recalculateHeroStats(hero);
+  hero.hp = round(Math.min(hero.maxHp, hero.hp + (hero.maxHp - oldMaxHp)));
+  hero.mp = round(Math.min(hero.maxMp, hero.mp + (hero.maxMp - oldMaxMp)));
+  addLog(`${hero.name} 成長：HP +${round(hero.maxHp - oldMaxHp)}、MP +${round(hero.maxMp - oldMaxMp)}${rolled.length ? `（${rolled.join("、")}）` : ""}。`);
+}
+
+function rollAttributeGrowth(points, luck, min, max) {
+  let total = 0;
+  for (let point = 0; point < Math.floor(points); point++) total += luckyGrowthRoll(luck, min, max);
+  return round(total);
+}
+
+function luckyGrowthRoll(luck, min, max) {
+  const rolls = luckyRollCount(luck);
+  let best = min;
+  for (let rollIndex = 0; rollIndex < rolls; rollIndex++) best = Math.max(best, randomInt(Math.round(min * 10), Math.round(max * 10)) / 10);
+  return best;
+}
+
+function rollDrops(enemy) {
+  const avgLevel = state.party.reduce((s, p) => s + p.level, 0) / state.party.length;
+  const totalLuck = state.party.reduce((sum, hero) => sum + Number(combatStat(hero, "LUK")), 0);
+  const levelDiff = Math.round((avgLevel - enemy.level) * 10) / 10;
+  const lootMultiplier = Math.max(0, Number(enemy.loot_multiplier) || 0);
+  const commonDrops = state.data.lootDrops.filter((row) => row.loot_id === enemy.loot_id);
+  for (const drop of commonDrops) {
+    const rate = calculatedItemDropRate(drop.base_drop_rate * lootMultiplier, totalLuck, levelDiff);
+    if (Math.random() * 100 < rate) receiveDrop(drop, randomInt(drop.quantity_min, drop.quantity_max), enemy.name);
+  }
+  const specialDrops = state.data.specialLoot.filter((row) => row.monster_id === enemy.monster_id);
+  for (const drop of specialDrops) {
+    const rate = calculatedItemDropRate(drop.base_drop_rate, totalLuck, levelDiff);
+    if (Math.random() * 100 < rate) receiveDrop(drop, randomInt(drop.quantity_min, drop.quantity_max), enemy.name);
+  }
+}
+
+function receiveDrop(drop, quantity, source) {
+  const itemName = catalogItem(drop.item_id)?.item_name ?? drop.item_name ?? drop.item_id;
+  const result = addInventoryItem(drop.item_id, itemName, quantity, { autoSell: true });
+  const text = result.autoSold
+    ? `自動賣出 ${itemName} × ${quantity}，獲得 ${result.gold} 金幣`
+    : `${itemName} × ${quantity}`;
+  if (result.autoSold) addLog(`${source} 掉落 ${itemName} × ${quantity}，已自動賣出並獲得 ${result.gold} 金幣。`, { channel: "other" });
+  state.drops.unshift({ text, source }); state.drops = state.drops.slice(0, 40);
+}
+
+function addInventoryItem(itemId, name, quantity, options = {}) {
+  quantity = Math.max(0, Math.trunc(Number(quantity) || 0));
+  const canStack = state.data.item.some((item) => item.item_id === itemId);
+  const isEquipment = state.data.equipment.some((item) => item.item_id === itemId);
+  const price = itemSellPrice(catalogItem(itemId));
+  const protectedStack = canStack && state.inventory.some((item) => item.itemId === itemId && item.locked);
+  if (quantity > 0 && options.autoSell && state.autoSellItemIds.has(itemId) && price !== null && !protectedStack) {
+    const gold = price * quantity;
+    state.gold += gold;
+    return { autoSold: true, quantity, gold };
+  }
+  if (canStack) {
+    const stack = state.inventory.find((item) => item.itemId === itemId);
+    if (stack) stack.quantity += quantity;
+    else state.inventory.push({ key: itemId, itemId, name, quantity, isEquipment: false });
+    return { autoSold: false, quantity, gold: 0 };
+  }
+  for (let index = 0; index < quantity; index++) {
+    state.inventory.push({ ...normalizeEquipmentInstance({ itemId }), name, quantity: 1, isEquipment });
+  }
+  return { autoSold: false, quantity, gold: 0 };
+}
+
+function useInventoryCell(visibleIndex) {
+  const inventoryIndex = state.inventoryPage * INVENTORY_PAGE_SIZE + visibleIndex;
+  const result = useInventoryItem(inventoryIndex);
+  if (result.message) addLog(result.message);
+  if (result.equipmentChanged) showEquipment(state.equipmentCharacter);
+  render();
+  if ($("#skill-dialog")?.open) renderSkillPanel();
+}
+
+function useInventoryItem(inventoryIndex) {
+  const inventoryItem = state.inventory[inventoryIndex];
+  if (!inventoryItem) return { used: false, message: "" };
+  if (inventoryItem.isEquipment) {
+    const hero = state.party.find((member) => member.slot === state.equipmentCharacter);
+    const item = state.data.equipment.find((row) => row.item_id === inventoryItem.itemId);
+    if (!hero || !item) return { used: false, message: `${inventoryItem.name} 的裝備資料不存在。` };
+    if (item.allowed_class !== "all" && !String(item.allowed_class ?? "").split("|").includes(hero.classId)) {
+      return { used: false, message: `${hero.name} 無法裝備 ${item.item_name}。` };
+    }
+    if (hero.level < (item.item_level ?? 1)) return { used: false, message: `${hero.name} 需要 Lv.${item.item_level} 才能裝備 ${item.item_name}。` };
+    const editSet = editedEquipmentSet(hero);
+    const equipment = equipmentConfig(hero, editSet);
+    const slotKey = findEquipmentSlot(hero, item, editSet);
+    if (!slotKey) return { used: false, message: `${item.item_name} 沒有對應的裝備欄位。` };
+    const replaced = equipment[slotKey];
+    const conflictSlot = findWeaponShieldConflict(hero, item, editSet);
+    const conflict = conflictSlot ? equipment[conflictSlot] : null;
+    const returnedNames = [];
+    state.inventory.splice(inventoryIndex, 1);
+    let returnIndex = inventoryIndex;
+    if (replaced) {
+      returnedNames.push(state.data.equipment.find((row) => row.item_id === replaced.itemId)?.item_name ?? replaced.itemId);
+      returnEquippedItemToInventory(replaced, returnIndex++);
+    }
+    if (conflict) {
+      returnedNames.push(state.data.equipment.find((row) => row.item_id === conflict.itemId)?.item_name ?? conflict.itemId);
+      returnEquippedItemToInventory(conflict, returnIndex++);
+      delete equipment[conflictSlot];
+    }
+    equipment[slotKey] = normalizeEquipmentInstance(inventoryItem);
+    recalculateHeroStats(hero);
+    return { used: true, equipmentChanged: true, hero, item, message: `${hero.name} 的 Set ${editSet} 裝備 ${item.item_name}${returnedNames.length ? `，${returnedNames.join("、")}已放回道具欄` : ""}。` };
+  }
+  const item = state.data.item.find((row) => row.item_id === inventoryItem.itemId);
+  if (["HPrecover", "MPrecover"].includes(item?.effect)) {
+    const hero = state.party.find((member) => member.slot === state.equipmentCharacter);
+    return useRecoveryItem(hero, item, false);
+  }
+  if (item?.effect !== "learn_skill") return { used: false, message: `${inventoryItem.name} 的使用功能尚未開放。` };
+  const hero = state.roster.find((member) => member.classId === item.target);
+  const skill = state.data.characterSkills.find((row) => row.skill_id === item.skill_id && row.class_id === item.target);
+  if (!hero || !skill) return { used: false, message: `${inventoryItem.name} 沒有可學習的適用角色。` };
+  if (hero.level < skill.level) return { used: false, message: `${hero.name} 需要 Lv.${skill.level} 才能學習 ${skill.name}。` };
+  if (hero.learnedSkillIds.has(skill.skill_id)) return { used: false, message: `${hero.name} 已經學會 ${skill.name}。` };
+  if (!learnSkill(hero, skill.skill_id)) return { used: false, message: `${skill.name} 學習失敗。` };
+  if (inventoryItem.quantity > 1) inventoryItem.quantity -= 1; else state.inventory.splice(inventoryIndex, 1);
+  return { used: true, hero, skill, message: `${hero.name} 使用技能書，學會 ${skill.name}。` };
+}
+
+function useRecoveryItem(hero, item, automatic = false) {
+  if (!hero || hero.hp <= 0) return { used: false, message: "倒下的角色無法使用恢復道具。" };
+  const cooldown = Number(item.cooldown);
+  if (!hasValidItemCooldown(item)) return { used: false, message: `${item.item_name} 缺少 item.csv cooldown 秒數，暫時無法使用。` };
+  if ((hero.itemCooldowns[item.item_id] ?? 0) > 0) return { used: false, message: `${hero.name} 的 ${item.item_name} 尚在冷卻中。` };
+  const isHp = item.effect === "HPrecover";
+  const current = isHp ? hero.hp : hero.mp;
+  const maximum = isHp ? hero.maxHp : hero.maxMp;
+  if (current >= maximum) return { used: false, message: `${hero.name} 的 ${isHp ? "HP" : "MP"} 已滿。` };
+  const inventoryIndex = state.inventory.findIndex((entry) => entry.itemId === item.item_id);
+  if (inventoryIndex < 0) return { used: false, message: `背包中沒有 ${item.item_name}。` };
+  const amount = randomInt(Number(item.effect_value_min) || 0, Number(item.effect_value_max) || 0);
+  const restored = round(Math.min(amount, maximum - current));
+  if (isHp) hero.hp = round(hero.hp + restored); else hero.mp = round(hero.mp + restored);
+  const entry = state.inventory[inventoryIndex];
+  if ((entry.quantity ?? 1) > 1) entry.quantity -= 1; else state.inventory.splice(inventoryIndex, 1);
+  hero.itemCooldowns[item.item_id] = cooldown;
+  const message = `${hero.name}${automatic ? "自動" : ""}使用 ${item.item_name}，恢復 ${restored} ${isHp ? "HP" : "MP"}。`;
+  if (automatic) addLog(message, { channel: "player" });
+  return { used: true, hero, item, message: automatic ? "" : message };
+}
+
+function returnEquippedItemToInventory(equipped, preferredIndex = null) {
+  const item = state.data.equipment.find((row) => row.item_id === equipped.itemId);
+  if (!item) return -1;
+  const entry = { ...normalizeEquipmentInstance(equipped), name: item.item_name, quantity: 1, isEquipment: true };
+  const insertAt = preferredIndex === null
+    ? state.inventory.length
+    : clamp(Math.trunc(Number(preferredIndex) || 0), 0, state.inventory.length);
+  state.inventory.splice(insertAt, 0, entry);
+  return insertAt;
+}
+
+function findWeaponShieldConflict(hero, item, setNumber = hero?.activeEquipmentSet) {
+  const equipment = equipmentConfig(hero, setNumber);
+  if (item.weapon_type === "two_hand_weapon" && equipment.shield_1) return "shield_1";
+  if (item.EQ_position !== "shield" || !equipment.weapon_1) return null;
+  const weapon = state.data.equipment.find((row) => row.item_id === equipment.weapon_1.itemId);
+  return weapon?.weapon_type === "two_hand_weapon" ? "weapon_1" : null;
+}
+
+function unequipItem(characterSlot, equipmentSlot) {
+  const hero = state.party.find((member) => member.slot === characterSlot);
+  const returnedIndex = state.inventory.length;
+  const editSet = hero ? editedEquipmentSet(hero) : 1;
+  const item = takeOffEquipment(hero, equipmentSlot, editSet);
+  if (!item) return false;
+  selectInventoryPage(Math.floor(returnedIndex / INVENTORY_PAGE_SIZE));
+  addLog(`${hero.name} 從 Set ${editSet} 卸下 ${item.item_name}，已放入道具欄。`);
+  showEquipment(characterSlot);
+  render();
+  return true;
+}
+
+function takeOffEquipment(hero, equipmentSlot, setNumber = hero?.activeEquipmentSet) {
+  const equipment = equipmentConfig(hero, setNumber);
+  const equipped = equipment[equipmentSlot];
+  if (!hero || !equipped) return null;
+  const item = state.data.equipment.find((row) => row.item_id === equipped.itemId);
+  returnEquippedItemToInventory(equipped);
+  delete equipment[equipmentSlot];
+  recalculateHeroStats(hero);
+  return item ?? { item_name: equipped.itemId };
+}
+
+const validLogColor = csvColor;
+
+function escapeLogText(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+}
+
+function coloredLogHtml(text, meta = {}) {
+  const source = String(text);
+  const tokens = [];
+  const addToken = (token, color, className, priority = 1) => {
+    if (!token || !source.includes(String(token))) return;
+    tokens.push({ token: String(token), color: validLogColor(color), className, priority });
+  };
+  for (const hero of state.roster ?? []) {
+    for (const name of new Set([hero.name, hero.customName, hero.className].filter(Boolean))) addToken(name, gameColor("player_name"), "log-player", 4);
+  }
+  for (const monster of state.data?.monsters ?? []) {
+    addToken(monster.name, monster.category === "boss" ? gameColor("monster_boss") : gameColor("monster_normal"), `log-monster log-monster-${monster.category}`, 3);
+  }
+  addToken(meta.skillName, csvColor(meta.skillColor, "#ededed"), "log-skill", 6);
+  addToken("閃避", gameColor("dodge"), "log-dodge", 8);
+  addToken("暴擊", gameColor("critical_hit"), "log-critical", 9);
+  if (meta.critical && meta.damage !== null && meta.damage !== undefined) addToken(formatExactNumber(meta.damage), gameColor("critical_hit"), "log-critical-damage", 7);
+
+  const candidates = [];
+  for (const token of tokens) {
+    let start = 0;
+    while ((start = source.indexOf(token.token, start)) >= 0) {
+      candidates.push({ ...token, start, end: start + token.token.length });
+      start += token.token.length;
+    }
+  }
+  candidates.sort((a, b) => a.start - b.start || b.priority - a.priority || b.token.length - a.token.length);
+  const selected = [];
+  for (const candidate of candidates) {
+    if (selected.some((range) => candidate.start < range.end && candidate.end > range.start)) continue;
+    selected.push(candidate);
+  }
+  selected.sort((a, b) => a.start - b.start);
+  let cursor = 0;
+  let html = "";
+  for (const token of selected) {
+    html += escapeLogText(source.slice(cursor, token.start));
+    html += `<span class="${token.className}" style="color:${token.color}">${escapeLogText(source.slice(token.start, token.end))}</span>`;
+    cursor = token.end;
+  }
+  return html + escapeLogText(source.slice(cursor));
+}
+
+function normalizeLogNumbers(text) {
+  return String(text).replace(/(-?\d+\.\d{2,})/g, (value) => formatExactNumber(Number(value)));
+}
+
+function appendLogEntry(log, text, meta) {
+  if (!log) return;
+  const li = document.createElement("li");
+  const message = coloredLogHtml(text, meta);
+  const coloredMessage = meta.messageColor ? `<span style="color:${validLogColor(meta.messageColor)}">${message}</span>` : message;
+  li.innerHTML = `<time>${formatTime(state.elapsed)}</time>${coloredMessage}`;
+  log.prepend(li);
+  while (log.children.length > 500) log.lastElementChild.remove();
+  log.scrollTop = 0;
+}
+
+function addLog(text, meta = {}) {
+  const normalizedText = normalizeLogNumbers(text);
+  const channel = ["player", "monster", "other"].includes(meta.channel) ? meta.channel : "other";
+  appendLogEntry($("#battle-log"), normalizedText, meta);
+  appendLogEntry($(`#battle-log-${channel}`), normalizedText, meta);
+}
+function formatTime(seconds) { return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`; }
+
+function render() {
+  applyCsvColorTheme();
+  renderPartyUnits($("#party")); renderUnits($("#enemies"), state.enemies, true);
+  if ($("#character-info-dialog")?.open) renderCharacterInfoPanel();
+  const inTown = state.map?.map_id === "town001";
+  $("#team-name").textContent = state.teamName;
+  $("#gold").textContent = state.gold.toLocaleString(); $("#status").textContent = inTown ? "村莊恢復中" : !livingParty().length ? "隊伍全滅" : state.paused ? "已暫停" : "戰鬥中";
+  $("#spawn-timer").textContent = inTown ? "全員休息中" : state.enemies.length >= state.map?.max_monsters ? "敵群已滿" : `增援 ${Math.max(0, (state.map?.spawn_cd ?? 0) - state.spawnElapsed).toFixed(1)}s`;
+  $("#drop-log").innerHTML = state.drops.length ? state.drops.map((d) => `<li><strong>${d.text}</strong><br><small>${d.source}</small></li>`).join("") : '<li class="empty">尚無掉落</li>';
+  renderInventory(); renderShop();
+}
+
+function renderPartyUnits(container) {
+  for (const [index, unit] of state.party.entries()) {
+    let card = container.children[index];
+    if (!card) {
+      card = $("#unit-template").content.firstElementChild.cloneNode(true);
+      const select = card.querySelector(".party-slot-select");
+      select.addEventListener("change", () => changePartyMember(select.dataset.slot, select.value));
+      card.querySelector(".portrait").remove();
+      container.append(card);
+    }
+    card.dataset.partySlot = unit.slot;
+    const select = card.querySelector(".party-slot-select");
+    select.dataset.slot = unit.slot;
+    select.setAttribute("aria-label", `${unit.slot} 位置職業`);
+    const available = state.roster.filter((hero) => hero === unit || !hero.slot);
+    const signature = available.map((hero) => `${hero.classId}:${hero.level}`).join("|");
+    if (select.dataset.signature !== signature) {
+      select.replaceChildren(...available.map((hero) => {
+        const option = document.createElement("option");
+        option.value = hero.classId;
+        option.textContent = `${hero.className} Lv.${hero.level}`;
+        return option;
+      }));
+      select.dataset.signature = signature;
+    }
+    select.value = unit.classId;
+    card.classList.toggle("front", unit === frontParty());
+    card.classList.toggle("dead", unit.hp <= 0);
+    card.querySelector("strong").textContent = unit.name;
+    card.querySelector(".unit-level").textContent = `Lv.${unit.level}`;
+    setBar(card, ".hp", unit.hp, unit.maxHp, "HP");
+    setBar(card, ".mp", unit.mp, unit.maxMp, "MP");
+    if (unit.level >= 100) setMaxLevelBar(card);
+    else setBar(card, ".exp", unit.exp, requiredExpFor(unit.level) ?? 1, "EXP", true);
+  }
+  while (container.children.length > state.party.length) container.lastElementChild.remove();
+}
+
+function renderInventory() {
+  const cells = [...$("#inventory-grid").children];
+  const start = state.inventoryPage * INVENTORY_PAGE_SIZE;
+  cells.forEach((cell, index) => {
+    const item = state.inventory[start + index];
+    const renderSignature = item
+      ? JSON.stringify([
+        item.key, item.itemUuid, item.itemId, item.name, item.quantity, item.locked,
+        item.isEquipment ? normalizeEnhancement(item) : null,
+      ])
+      : "";
+    if (cell.dataset.renderSignature === renderSignature) return;
+    cell.dataset.renderSignature = renderSignature;
+    cell.textContent = inventoryButtonText(item);
+    applyEnhancementVisual(cell, item?.isEquipment ? item : null);
+    const source = item ? catalogItem(item.itemId) : null;
+    if (item?.isEquipment) assignEquipmentTooltip(cell, source, "點擊裝備", item);
+    else {
+      assignEquipmentTooltip(cell, null, "", null);
+      cell.title = item ? `${itemTooltip(source)}\n數量 ${item.quantity}` : "";
+    }
+    cell.disabled = !item;
+    cell.setAttribute("aria-label", item ? `使用 ${item.name}` : "空白道具格");
+  });
+}
+
+function renderUnits(container, units, enemies) {
+  const desired = enemies ? 3 : units.length; container.replaceChildren();
+  for (let i = 0; i < desired; i++) {
+    const unit = units[i]; const card = $("#unit-template").content.firstElementChild.cloneNode(true);
+    if (!unit) { card.classList.add("dead"); card.querySelector(".slot").textContent = ["D", "E", "F"][i]; card.querySelector(".glyph").textContent = "—"; card.querySelector("strong").textContent = "等待生成"; card.querySelector(".unit-level").textContent = "空位"; setBar(card, ".hp", 0, 1, "HP"); card.querySelector(".mp").hidden = card.querySelector(".exp").hidden = true; container.append(card); continue; }
+    const front = enemies ? i === 0 : unit === frontParty(); card.classList.toggle("front", front); card.classList.toggle("dead", unit.hp <= 0);
+    card.querySelector(".slot").textContent = enemies ? ["D", "E", "F"][i] : unit.slot; card.querySelector(".glyph").textContent = enemies ? (unit.category === "boss" ? "♛" : "◆") : unit.slot;
+    card.querySelector("strong").textContent = unit.name; card.querySelector(".unit-level").textContent = `Lv.${unit.level}`; setBar(card, ".hp", unit.hp, unit.maxHp, "HP", unit.maxHp >= 1000);
+    if (enemies) card.querySelector(".mp").hidden = card.querySelector(".exp").hidden = true;
+    else {
+      setBar(card, ".mp", unit.mp, unit.maxMp, "MP");
+      if (unit.level >= 100) setMaxLevelBar(card);
+      else setBar(card, ".exp", unit.exp, requiredExpFor(unit.level) ?? 1, "EXP", true);
+    }
+    container.append(card);
+  }
+}
+
+function formatExactNumber(value) { return roundStat(value).toLocaleString("en-US", { maximumFractionDigits: 1 }); }
+function formatCompactNumber(value) {
+  const units = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]];
+  const unit = units.find(([size]) => value >= size);
+  if (!unit) return formatExactNumber(value);
+  const scaled = value / unit[0];
+  const digits = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  return `${Number(scaled.toFixed(digits))}${unit[1]}`;
+}
+function setBar(card, selector, value, max, label, compactMax = false) {
+  const bar = card.querySelector(selector);
+  bar.querySelector("i").style.width = `${clamp(value / Math.max(1, max) * 100, 0, 100)}%`;
+  bar.querySelector(".bar-label").textContent = label;
+  const isResource = label === "HP" || label === "MP";
+  const displayMax = isResource ? Math.floor(Number(max) || 0) : max;
+  const isFullResource = isResource && Number(value) >= Number(max) - 0.000001;
+  bar.querySelector(".bar-current").textContent = isFullResource ? Math.floor(Number(value) || 0).toLocaleString("en-US") : formatExactNumber(value);
+  bar.querySelector(".bar-max").textContent = `/ ${compactMax || displayMax >= 1000 ? formatCompactNumber(displayMax) : formatExactNumber(displayMax)}`;
+}
+function setMaxLevelBar(card) {
+  const bar = card.querySelector(".exp");
+  bar.querySelector("i").style.width = "100%";
+  bar.querySelector(".bar-label").textContent = "EXP";
+  bar.querySelector(".bar-current").textContent = "MAX";
+  bar.querySelector(".bar-max").textContent = "";
+}
+function togglePause() { state.paused = !state.paused; $("#pause-button").textContent = state.paused ? "繼續" : "暫停"; }
+
+init();

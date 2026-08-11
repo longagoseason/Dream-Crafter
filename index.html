@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dreamer · 三人隊伍放置 RPG</title>
+  <link rel="stylesheet" href="./style.css?v=20260811-github-save-manager">
+</head>
+<body>
+  <main class="game-layout">
+    <section class="left-column">
+      <article class="box party-box">
+        <div class="box-title team-title"><span id="team-name">隊伍</span><button id="welcome-button" type="button" aria-label="開啟歡迎訊息" title="歡迎訊息">？</button></div>
+        <div id="party" class="party"></div>
+      </article>
+
+      <section class="equipment-area" aria-label="角色裝備">
+        <nav class="character-tabs" aria-label="選擇角色裝備">
+          <button type="button" class="active" data-character="A">牧</button>
+          <button type="button" data-character="B">法</button>
+          <button type="button" data-character="C">戰</button>
+        </nav>
+        <article class="equipment-set">
+          <div id="equipment-grid" class="equipment-grid">
+            <button type="button" data-slot="necklace_1" data-position="necklace">項鍊</button><button type="button" data-slot="earrings_1" data-position="earrings">耳環</button><button type="button" data-slot="helmet_1" data-position="helmet">頭盔</button><button type="button" data-slot="earrings_2" data-position="earrings">耳環</button><div class="equipment-set-control" id="equipment-set-control">
+              <div class="equipment-set-row" data-set-row="1"><button type="button" data-equipment-set="1"><span class="equipment-set-class">牧師</span><span>Set 1</span></button><input type="checkbox" data-active-equipment-set="1" aria-label="實際穿戴 Set 1"></div>
+              <div class="equipment-set-row" data-set-row="2"><button type="button" data-equipment-set="2"><span class="equipment-set-class">牧師</span><span>Set 2</span></button><input type="checkbox" data-active-equipment-set="2" aria-label="實際穿戴 Set 2"></div>
+            </div>
+            <span class="equipment-blank" aria-hidden="true"></span><button type="button" data-slot="weapon_1" data-position="physical_weapon,magic_weapon">武器</button><button type="button" data-slot="body_1" data-position="body">盔甲</button><button type="button" data-slot="shield_1" data-position="shield,martial_weapon">副手</button><span class="equipment-blank" aria-hidden="true"></span>
+            <button type="button" data-slot="ring_1" data-position="ring">戒指</button><button type="button" data-slot="ring_2" data-position="ring">戒指</button><button type="button" data-slot="kneepads_1" data-position="kneepads">護膝</button><button type="button" data-slot="ring_3" data-position="ring">戒指</button><button type="button" data-slot="ring_4" data-position="ring">戒指</button>
+            <button type="button" data-slot="idol_1" data-position="idol">神像</button><button type="button" data-slot="bracers_1" data-position="bracers">護腕</button><button type="button" data-slot="shoe_1" data-position="shoe">鞋子</button><button type="button" data-slot="bracers_2" data-position="bracers">護腕</button><button type="button" data-slot="core_1" data-position="core">核心</button>
+          </div>
+        </article>
+      </section>
+
+      <article class="box gold-box"><span>金幣</span><strong id="gold">0</strong><button id="anvil-button" type="button" title="裝備強化"><span class="anvil-icon" aria-hidden="true">⚒</span><span>裝備強化</span></button></article>
+    </section>
+
+    <section class="center-column">
+      <article class="box monster-box">
+        <div class="box-title monster-toolbar">
+          <select id="map-select" aria-label="選擇地圖"></select>
+          <span id="spawn-timer">生成中</span>
+          <button id="pause-button" type="button">暫停</button>
+        </div>
+        <div id="enemies" class="enemies"></div>
+      </article>
+
+      <article class="box field-box">
+        <div class="inventory-pages" aria-label="道具頁面">
+          <button type="button" class="active" data-page="0">1</button>
+          <button type="button" data-page="1">2</button>
+          <button type="button" data-page="2">3</button>
+          <button type="button" data-page="3">4</button>
+          <button type="button" data-page="4">5</button>
+          <button type="button" data-page="5">6</button>
+          <button type="button" data-page="6">7</button>
+          <button type="button" data-page="7">8</button>
+          <button type="button" data-page="8">9</button>
+          <button type="button" data-page="9">10</button>
+        </div>
+        <div id="inventory-grid" class="inventory-grid" aria-label="戰利品暫存格"></div>
+      </article>
+
+      <nav class="bottom-tabs" aria-label="功能分頁">
+        <button id="character-info-button" type="button">角色資訊</button>
+        <button id="attribute-button" type="button">屬性配點</button>
+        <button id="skill-button" type="button">技能設定</button>
+        <button id="recovery-button" type="button">恢復與設定</button>
+      </nav>
+    </section>
+
+    <aside class="right-column">
+      <nav class="right-tabs" aria-label="右側功能">
+        <button type="button" class="active" data-right-page="battle">戰鬥資訊</button>
+        <button type="button" data-right-page="shop">商店</button>
+      </nav>
+      <section id="right-battle-page" class="right-page battle-page">
+        <article class="box battle-log-panel">
+          <div class="box-title"><span>訊息</span><small id="status">讀取資料…</small></div>
+          <nav class="battle-log-tabs" aria-label="戰鬥訊息分類">
+            <button type="button" class="active" data-log-channel="all">綜合訊息</button>
+            <button type="button" data-log-channel="player">我方資訊</button>
+            <button type="button" data-log-channel="monster">怪物資訊</button>
+            <button type="button" data-log-channel="other">其他</button>
+          </nav>
+          <ol id="battle-log" class="log" data-log-panel="all" aria-live="polite"></ol>
+          <ol id="battle-log-player" class="log" data-log-panel="player" hidden></ol>
+          <ol id="battle-log-monster" class="log" data-log-panel="monster" hidden></ol>
+          <ol id="battle-log-other" class="log" data-log-panel="other" hidden></ol>
+        </article>
+        <article class="box drop-panel">
+          <div class="drop-heading">掉落紀錄</div>
+          <ul id="drop-log" class="drops"></ul>
+        </article>
+      </section>
+      <article id="right-shop-page" class="box right-page shop-box" hidden>
+        <div class="shop-status"><span>商店</span><small id="save-status">讀取存檔…</small></div>
+        <nav class="shop-tabs" aria-label="商店功能"><button type="button" class="active" data-shop-mode="buy">購買</button><button type="button" data-shop-mode="sell">販賣</button><button type="button" data-shop-mode="auto-sell">自動賣出</button><button type="button" data-shop-mode="recycle">商店回收</button></nav>
+        <div id="shop-list" class="shop-list" aria-label="商店物品"></div>
+      </article>
+    </aside>
+  </main>
+  <dialog id="welcome-dialog" class="welcome-dialog">
+    <div class="dialog-title"><strong>歡迎訊息</strong><button id="welcome-close" type="button" aria-label="關閉">×</button></div>
+    <div id="welcome-lines" class="welcome-lines"></div>
+  </dialog>
+  <template id="unit-template">
+    <article class="unit-card">
+      <div class="portrait"><span class="slot"></span><b class="glyph"></b></div>
+      <div class="unit-copy">
+        <div class="unit-name"><strong></strong><span class="unit-level"></span></div>
+        <div class="bar hp"><i></i><em><span class="bar-label"></span><span class="bar-current"></span><span class="bar-max"></span></em></div>
+        <div class="bar mp"><i></i><em><span class="bar-label"></span><span class="bar-current"></span><span class="bar-max"></span></em></div>
+        <div class="bar exp"><i></i><em><span class="bar-label"></span><span class="bar-current"></span><span class="bar-max"></span></em></div>
+        <div class="party-selection-bar"><select class="party-slot-select"></select></div>
+      </div>
+    </article>
+  </template>
+  <dialog id="character-info-dialog" class="attribute-dialog character-info-dialog">
+    <div class="dialog-title"><strong>角色資訊</strong><button id="character-info-close" type="button" aria-label="關閉">×</button></div>
+    <nav id="character-info-characters" class="attribute-characters" aria-label="選擇角色資訊">
+      <button type="button" data-character="A">A 牧</button>
+      <button type="button" data-character="B">B 法</button>
+      <button type="button" data-character="C">C 戰</button>
+    </nav>
+    <div id="character-info-grid" class="character-info-grid"></div>
+  </dialog>
+  <dialog id="attribute-dialog" class="attribute-dialog">
+    <div class="dialog-title"><strong>下次升級屬性配置</strong><button id="attribute-close" type="button" aria-label="關閉">×</button></div>
+    <nav id="attribute-characters" class="attribute-characters attribute-character-tabs" aria-label="選擇配點角色">
+      <button type="button" data-character="A">A 牧</button>
+      <button type="button" data-character="B">B 法</button>
+      <button type="button" data-character="C">C 戰</button>
+    </nav>
+    <form id="attribute-form">
+      <div class="attribute-plan-table">
+        <div class="attribute-plan-head"><span>屬性</span><span>未來升級配置</span><span>目前升級配點</span><span>裝備屬性點數</span></div>
+        <div id="attribute-grid" class="attribute-plan-body"></div>
+      </div>
+      <p class="attribute-total">下次升級配置：<strong id="attribute-total">0 / 5</strong></p>
+      <p id="attribute-message" class="attribute-message">每次升級會自動套用這組配置。</p>
+      <button class="attribute-save" type="submit">儲存配置</button>
+    </form>
+  </dialog>
+  <dialog id="skill-dialog" class="attribute-dialog skill-dialog">
+    <div class="dialog-title"><strong>技能設定 <span id="skill-title-help" class="skill-title-help">[優先度數字越低的技能會優先使用]</span></strong><button id="skill-close" type="button" aria-label="關閉">×</button></div>
+    <nav id="skill-characters" class="attribute-characters" aria-label="選擇技能角色">
+      <button type="button" data-character="A">A 牧</button>
+      <button type="button" data-character="B">B 法</button>
+      <button type="button" data-character="C">C 戰</button>
+    </nav>
+    <div id="skill-list" class="skill-list"></div>
+    <p class="skill-note">治療與條件技能可個別設定開關、MP 門檻、HP 觸發比例及需求人數</p>
+  </dialog>
+  <dialog id="recovery-dialog" class="attribute-dialog recovery-dialog">
+    <div class="dialog-title"><strong>恢復與設定</strong><button id="recovery-close" type="button" aria-label="關閉">×</button></div>
+    <label class="team-name-setting"><span>隊伍名稱</span><input id="team-name-input" type="text" maxlength="20" aria-label="隊伍名稱，最多20個字"><small>最多 20 個字</small></label>
+    <p id="recovery-warning" class="recovery-warning"></p>
+    <div class="recovery-head"><span>職業名稱／角色名稱</span><span>自動 HP%／藥水</span><span>自動 MP%／藥水</span><span>角色重置</span></div>
+    <div id="recovery-settings" class="recovery-settings"></div>
+    <div class="recovery-footer"><p class="skill-note recovery-note">HP、MP 自動使用可由各職業獨立開關；角色重置冷卻為 60 秒。</p><button id="save-manager-button" type="button">存檔管理</button></div>
+  </dialog>
+  <dialog id="save-manager-dialog" class="attribute-dialog save-manager-dialog">
+    <div class="dialog-title"><strong>存檔管理</strong><button id="save-manager-close" type="button" aria-label="關閉">×</button></div>
+    <section class="save-manager-content">
+      <h3>目前存檔資訊</h3>
+      <dl class="save-summary">
+        <dt>角色</dt><dd id="save-summary-character">—</dd>
+        <dt>等級</dt><dd id="save-summary-level">—</dd>
+        <dt>最後存檔時間</dt><dd id="save-summary-time">—</dd>
+        <dt>遊戲版本</dt><dd id="save-summary-game-version">—</dd>
+        <dt>存檔版本</dt><dd id="save-summary-save-version">—</dd>
+        <dt>儲存位置</dt><dd id="save-summary-storage">—</dd>
+      </dl>
+      <p class="save-manager-help">若需要回報遊戲問題，請按「匯出存檔」，並將下載的 JSON 存檔提供給開發者。</p>
+      <p id="save-manager-message" class="save-manager-message" aria-live="polite"></p>
+      <div class="save-manager-actions"><button id="save-export" type="button">匯出存檔</button><button id="save-import" type="button">匯入存檔</button></div>
+      <input id="save-import-file" type="file" accept="application/json,.json" hidden>
+    </section>
+  </dialog>
+  <dialog id="enhance-dialog" class="attribute-dialog enhance-dialog">
+    <div class="dialog-title"><strong>裝備強化</strong><button id="enhance-close" type="button" aria-label="關閉">×</button></div>
+    <nav id="enhance-characters" class="attribute-characters" aria-label="選擇強化角色">
+      <button type="button" data-character="A">牧師</button>
+      <button type="button" data-character="B">法師</button>
+      <button type="button" data-character="C">戰士</button>
+    </nav>
+    <div class="enhance-layout">
+      <section>
+        <p id="enhance-class" class="enhance-class">牧師</p>
+        <div id="enhance-equipment-grid" class="equipment-grid enhance-equipment-grid">
+          <button type="button" data-slot="necklace_1" data-position="necklace">項鍊</button><button type="button" data-slot="earrings_1" data-position="earrings">耳環</button><button type="button" data-slot="helmet_1" data-position="helmet">頭盔</button><button type="button" data-slot="earrings_2" data-position="earrings">耳環</button><div class="enhance-set-control" aria-label="選擇要強化的裝備套裝"><button type="button" data-enhance-set="1">Set 1</button><button type="button" data-enhance-set="2">Set 2</button></div>
+          <span class="equipment-blank" aria-hidden="true"></span><button type="button" data-slot="weapon_1" data-position="physical_weapon,magic_weapon">武器</button><button type="button" data-slot="body_1" data-position="body">盔甲</button><button type="button" data-slot="shield_1" data-position="shield,martial_weapon">副手</button><span class="equipment-blank" aria-hidden="true"></span>
+          <button type="button" data-slot="ring_1" data-position="ring">戒指</button><button type="button" data-slot="ring_2" data-position="ring">戒指</button><button type="button" data-slot="kneepads_1" data-position="kneepads">護膝</button><button type="button" data-slot="ring_3" data-position="ring">戒指</button><button type="button" data-slot="ring_4" data-position="ring">戒指</button>
+          <button type="button" data-slot="idol_1" data-position="idol">神像</button><button type="button" data-slot="bracers_1" data-position="bracers">護腕</button><button type="button" data-slot="shoe_1" data-position="shoe">鞋子</button><button type="button" data-slot="bracers_2" data-position="bracers">護腕</button><button type="button" data-slot="core_1" data-position="core">核心</button>
+        </div>
+        <p id="enhance-owned-gold" class="enhance-owned-gold">持有 0 金幣</p>
+        <p id="enhance-cost-summary" class="enhance-cost-summary">請先選擇裝備</p>
+        <p id="enhance-message" class="attribute-message enhance-notice"></p>
+      </section>
+      <section class="enhance-controls">
+        <strong id="enhance-item-name">請選擇裝備</strong>
+        <div id="enhance-attribute-options" class="enhance-options"></div>
+        <div id="enhance-special-controls" class="enhance-special-controls" hidden>
+          <div><select id="enhance-stone-bless" data-enhance-stone-type="bless" aria-label="祝福強化石"></select><button type="button" data-enhance-type="bless">祝福強化</button></div>
+          <div><select id="enhance-stone-curse" data-enhance-stone-type="curse" aria-label="詛咒強化石"></select><button type="button" data-enhance-type="curse">詛咒強化</button></div>
+          <div><select id="enhance-stone-chaos" data-enhance-stone-type="chaos" aria-label="混沌強化石"></select><button type="button" data-enhance-type="chaos">混沌強化</button></div>
+        </div>
+        <button id="enhance-confirm" type="button" disabled>執行強化</button>
+      </section>
+      <section class="enhance-history" aria-label="過去強化數據">
+        <div class="enhance-history-heading">
+          <strong>過去強化數據</strong>
+          <div id="enhance-return-controls" class="enhance-return-controls" hidden>
+            <select id="enhance-return-stone" aria-label="倒回石"></select>
+            <button id="enhance-return-mode" type="button">倒回強化</button>
+            <button id="enhance-return-confirm" type="button">倒回至 +4</button>
+          </div>
+        </div>
+        <div id="enhance-safe-history" class="enhance-safe-history"></div>
+        <div id="enhance-over-history" class="enhance-over-history"></div>
+      </section>
+    </div>
+  </dialog>
+  <div id="equipment-tooltip" class="equipment-tooltip" role="tooltip" hidden></div>
+  <script src="./battleService.js?v=20260728-heal-int-half"></script>
+  <script src="./runtimePlatform.js?v=20260811-github-save-manager"></script>
+  <script src="./saveManager.js?v=20260811-github-save-manager"></script>
+  <script src="./game.js?v=20260811-github-save-manager"></script>
+</body>
+</html>

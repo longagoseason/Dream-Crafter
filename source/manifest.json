@@ -1,0 +1,134 @@
+{
+  "generatedAt": "2026-08-11T12:02:06.911Z",
+  "csvFiles": [
+    {
+      "file": "Dreamer_Syetem - Dreamer_Syetem.csv",
+      "table": "dreamerSystem",
+      "rows": 1,
+      "columns": 7
+    },
+    {
+      "file": "Drop_loot_id - Drop_loot_id.csv",
+      "table": "lootDrops",
+      "rows": 105,
+      "columns": 6
+    },
+    {
+      "file": "Drop_special_loot - Drop_special_loot.csv",
+      "table": "specialLoot",
+      "rows": 32,
+      "columns": 7
+    },
+    {
+      "file": "Enhance_ChaosEnchant - Enhance_ChaosEnchant.csv",
+      "table": "enhanceChaosEnchant",
+      "rows": 15,
+      "columns": 21
+    },
+    {
+      "file": "Enhance_OverEnchant - Enhance_OverEnchant.csv",
+      "table": "enhanceOverEnchant",
+      "rows": 17,
+      "columns": 21
+    },
+    {
+      "file": "Enhance_SaveEnchant - Enhance_SaveEnchant.csv",
+      "table": "enhanceSaveEnchant",
+      "rows": 14,
+      "columns": 21
+    },
+    {
+      "file": "Enhance_level - Enhance_level.csv",
+      "table": "enhanceLevel",
+      "rows": 11,
+      "columns": 12
+    },
+    {
+      "file": "Game_color_index - Game_color_index.csv",
+      "table": "gameColorIndex",
+      "rows": 49,
+      "columns": 3
+    },
+    {
+      "file": "Welcome_news - Welcome_news.csv",
+      "table": "welcomeNews",
+      "rows": 24,
+      "columns": 4
+    },
+    {
+      "file": "character_Attribute - character_Attribute.csv",
+      "table": "characterAttribute",
+      "rows": 6,
+      "columns": 22
+    },
+    {
+      "file": "character_skills - character_skills.csv",
+      "table": "characterSkills",
+      "rows": 60,
+      "columns": 29
+    },
+    {
+      "file": "classes - classes.csv",
+      "table": "classes",
+      "rows": 5,
+      "columns": 26
+    },
+    {
+      "file": "equipment - equipment.csv",
+      "table": "equipment",
+      "rows": 59,
+      "columns": 27
+    },
+    {
+      "file": "index_Attribute - index_Attribute.csv",
+      "table": "attributeIndex",
+      "rows": 22,
+      "columns": 3
+    },
+    {
+      "file": "item - item.csv",
+      "table": "item",
+      "rows": 69,
+      "columns": 11
+    },
+    {
+      "file": "map - map.csv",
+      "table": "map",
+      "rows": 12,
+      "columns": 5
+    },
+    {
+      "file": "map_spawn - map_spawn.csv",
+      "table": "mapSpawn",
+      "rows": 38,
+      "columns": 4
+    },
+    {
+      "file": "monster_skill_setting - monster_skill_setting.csv",
+      "table": "skill",
+      "rows": 32,
+      "columns": 15
+    },
+    {
+      "file": "monster_use_skills - monster_use_skills.csv",
+      "table": "monsterSkills",
+      "rows": 51,
+      "columns": 10
+    },
+    {
+      "file": "monsters - monsters.csv",
+      "table": "monsters",
+      "rows": 27,
+      "columns": 21
+    },
+    {
+      "file": "player_level - player_level.csv",
+      "table": "playerLevel",
+      "rows": 100,
+      "columns": 3
+    }
+  ],
+  "generatedFiles": [
+    "game-data.json"
+  ]
+}
