@@ -1,13 +1,13 @@
 Dream-Crafter GitHub Pages Build Report
-建立時間：2026-08-11T12:02:07.008Z
+建立時間：2026-08-11T12:53:17.984Z
 來源：build_github.bat 所在的專案根目錄（dreamer-game-data-v1-xlsx-rpg）
 
 【已複製／產生】
 HTML：index.html（1）
-JavaScript：battleService.js、runtimePlatform.js、saveManager.js、game.js（4）
+JavaScript：battleService.js、csvLoader.js、runtimePlatform.js、saveManager.js、game.js（5）
 CSS：style.css（1）
 CSV：21 份（source/）
-JSON：source/game-data.json、source/manifest.json（build 時由已驗證 CSV 產生）
+JSON：source/manifest.json（只列出本次啟動必須下載的 CSV；不保存 master data 快照）
 圖片：0（目前沒有 runtime 引用）
 音效：0（目前沒有 runtime 引用）
 字型：0（目前沒有 runtime 引用）

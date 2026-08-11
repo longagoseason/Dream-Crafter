@@ -2,8 +2,8 @@
 
 (function exposeRuntimePlatform(global) {
   const API_HEALTH_URL = "./api/health";
-  const API_GAME_DATA_URL = "./api/game-data";
-  const STATIC_GAME_DATA_URL = "./source/game-data.json";
+  const API_CSV_MANIFEST_URL = "./api/csv-manifest";
+  const STATIC_CSV_MANIFEST_URL = "./source/manifest.json";
 
   let mode = null;
 
@@ -26,14 +26,15 @@
 
   async function loadGameData() {
     const activeMode = await initialize();
-    const url = activeMode === "local-api" ? API_GAME_DATA_URL : STATIC_GAME_DATA_URL;
-    return fetchJson(url);
+    if (!global.DreamerCsvLoader) throw new Error("csvLoader.js 尚未載入");
+    const manifestUrl = activeMode === "local-api" ? API_CSV_MANIFEST_URL : STATIC_CSV_MANIFEST_URL;
+    return global.DreamerCsvLoader.loadAll(manifestUrl);
   }
 
   global.DreamerRuntime = {
     initialize,
     loadGameData,
     get mode() { return mode; },
-    get dataSource() { return mode === "local-api" ? API_GAME_DATA_URL : STATIC_GAME_DATA_URL; },
+    get dataSource() { return mode === "local-api" ? `${API_CSV_MANIFEST_URL} + ./source/*.csv` : `${STATIC_CSV_MANIFEST_URL} + ./source/*.csv`; },
   };
 })(window);

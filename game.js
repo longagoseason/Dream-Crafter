@@ -36,12 +36,13 @@ const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + mi
 
 async function init() {
   try {
-    if (!globalThis.DreamerRuntime || !globalThis.DreamerSaveManager) throw new Error("runtimePlatform.js 或 saveManager.js 尚未載入");
+    if (!globalThis.DreamerCsvLoader || !globalThis.DreamerRuntime || !globalThis.DreamerSaveManager) throw new Error("csvLoader.js、runtimePlatform.js 或 saveManager.js 尚未載入");
     const runtimeMode = await DreamerRuntime.initialize();
     await DreamerSaveManager.initialize(runtimeMode);
-    const [gameData, saved] = await Promise.all([DreamerRuntime.loadGameData(), DreamerSaveManager.loadGame()]);
+    const gameData = await DreamerRuntime.loadGameData();
     state.data = gameData;
     validateGameData(state.data);
+    const saved = await DreamerSaveManager.loadGame();
     document.title = String(systemSettings().Homepage_title || document.title);
     applyCsvColorTheme();
     buildInventoryGrid();
@@ -87,7 +88,9 @@ function exportPlayerSave() {
     gameVersion: globalThis.DreamerSaveManager?.GAME_VERSION ?? "0.1.0",
     teamName: state.teamName,
     gold: state.gold,
-    inventory: state.inventory,
+    inventory: state.inventory.map((entry) => entry.isEquipment
+      ? { key: entry.key, itemUuid: entry.itemUuid, itemId: entry.itemId, locked: Boolean(entry.locked), enhancement: entry.enhancement, quantity: 1, isEquipment: true }
+      : { key: entry.key || entry.itemId, itemId: entry.itemId, quantity: entry.quantity, locked: Boolean(entry.locked), isEquipment: false }),
     autoSellItemIds: [...state.autoSellItemIds],
     currentMapId: state.map?.map_id ?? null,
     townAutoReturn: state.map?.map_id === "town001" && state.townAutoReturn,
@@ -148,10 +151,11 @@ function applyPlayerSave(saved) {
   state.gold = Math.max(0, Math.trunc(Number(saved.gold) || 0));
   state.teamName = normalizeTeamName(saved.teamName);
   state.inventory = (saved.inventory ?? [])
-    .filter((entry) => state.data.item.some((item) => item.item_id === entry.itemId) || state.data.equipment.some((item) => item.item_id === entry.itemId))
-    .map((entry) => state.data.equipment.some((item) => item.item_id === entry.itemId)
-      ? { ...normalizeEquipmentInstance(entry), name: entry.name, quantity: 1, isEquipment: true }
-      : { ...entry, key: entry.key || entry.itemId, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), isEquipment: false });
+    .map((entry) => ({ entry, item: catalogItem(entry.itemId) }))
+    .filter(({ item }) => Boolean(item))
+    .map(({ entry, item }) => state.data.equipment.some((candidate) => candidate.item_id === entry.itemId)
+      ? { ...normalizeEquipmentInstance(entry), name: item.item_name, quantity: 1, isEquipment: true }
+      : { key: entry.key || entry.itemId, itemId: entry.itemId, name: item.item_name, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), locked: Boolean(entry.locked), isEquipment: false });
   state.autoSellItemIds = new Set((saved.autoSellItemIds ?? []).filter((itemId) => catalogItem(itemId)));
   ensureUniqueEquipmentUuids();
   state.savedMapId = saved.currentMapId ?? null;

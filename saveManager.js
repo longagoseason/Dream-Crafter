@@ -8,17 +8,20 @@
   const DATABASE_VERSION = 1;
   const STORE_NAME = "saves";
   const PRIMARY_KEY = "primary";
+  const MASTER_DATA_KEYS = new Set(["data", "tables", "gameData", "masterData", "classes", "equipmentCatalog", "itemCatalog", "monsters", "skills", "maps", "stages"]);
 
   function clone(value) { return value == null ? null : JSON.parse(JSON.stringify(value)); }
 
   function prepareSave(save) {
-    return {
+    const prepared = {
       ...clone(save),
       version: SAVE_VERSION,
       saveVersion: SAVE_VERSION,
       gameVersion: GAME_VERSION,
       savedAt: new Date().toISOString(),
     };
+    for (const key of MASTER_DATA_KEYS) delete prepared[key];
+    return prepared;
   }
 
   function validateSave(save) {
