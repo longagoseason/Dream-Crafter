@@ -1,0 +1,6 @@
+class_id,class_name,base_ATK,base_MATK,base_CRI,base_CRI_DMG,base_AC,base_MR,base_AAR,base_SAR,base_HP,base_HPR,base_MP,base_MPR,base_ADAM,base_MDAM,STR,CON,INT,WIS,DEX,LUK,initial_weapon,initial_body,initial_item,initial_item_value
+warrior,戰士,0,0,1,150,0,0,0,0,80,0.1,50,0.1,0,0,5,1,1,1,1,1,eq0010,eq0001,item101,50
+mage,法師,0,0,1,150,0,0,0,0,50,0.1,80,0.1,0,0,1,1,5,1,1,1,eq0011,eq0001,item101,50
+martial,武道家,0,0,1,150,0,0,0,0,80,0.1,50,0.1,0,0,1,5,1,1,1,1,eq0012,eq0001,item101,50
+priest,牧師,0,0,1,150,0,0,0,0,50,0.1,80,0.1,0,0,1,1,1,5,1,1,eq0011,eq0001,item101,50
+thief,盜賊,0,0,5,150,0,0,0,0,80,0.1,50,0.1,0,0,1,1,1,1,5,1,eq0010,eq0001,item101,50
