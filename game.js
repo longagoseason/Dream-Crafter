@@ -19,7 +19,7 @@ const EQUIPMENT_SLOTS = [
 const state = {
   data: null, map: null, previousMapId: null, roster: [], party: [], enemies: [], gold: 0, drops: [], inventory: [], inventoryPage: 0,
   equipmentCharacter: "A", equipmentEditSets: {}, infoCharacter: "A", attributeCharacter: "A", skillCharacter: "A", enhanceCharacter: "A", enhanceEquipmentSet: 1, enhanceEquipmentSlot: null,
-  enhanceSelectedAttribute: null, enhanceSelectedType: "bless", enhanceStoneKeys: { bless: null, curse: null, chaos: null }, enhanceReturnStoneKey: null, enhanceOperation: null, shopMode: "buy", rightPage: "battle", battleLogChannel: "all", elapsed: 0, spawnElapsed: 0, paused: false, lastTime: 0, savePending: false,
+  enhanceSelectedAttribute: null, enhanceSelectedType: "bless", enhanceStoneKeys: { bless: null, curse: null, chaos: null }, enhanceReturnStoneKey: null, enhanceOperation: null, shopMode: "buy", rightPage: "battle", battleLogChannel: "all", elapsed: 0, spawnElapsed: 0, paused: false, lastTime: 0, savePending: false, savePromise: null, saveTransition: false, currentSlot: null,
   savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(),
 };
 const equipmentTooltipModels = new WeakMap();
@@ -42,12 +42,15 @@ async function init() {
     const gameData = await DreamerRuntime.loadGameData();
     state.data = gameData;
     validateGameData(state.data);
-    const saved = await DreamerSaveManager.loadGame();
+    DreamerSaveManager.configureGameVersion(systemSettings().Game_version);
+    const activeSlot = DreamerSaveManager.activeSlotId;
+    const saved = activeSlot ? await DreamerSaveManager.loadSlot(activeSlot) : null;
     document.title = String(systemSettings().Homepage_title || document.title);
     applyCsvColorTheme();
     buildInventoryGrid();
     setupInventoryPages();
     buildParty();
+    state.currentSlot = saved ? activeSlot : null;
     const saveLoaded = applyPlayerSave(saved);
     if (!saveLoaded) grantInitialItems();
     setupEquipmentTooltip();
@@ -63,11 +66,17 @@ async function init() {
     setupEnhancePanel();
     buildMapSelect();
     const firstBattleMap = state.data.map.find((map) => map.map_id !== "town001" && map.max_monsters > 0);
-    const restoredCurrentMap = state.data.map.find((map) => map.map_id === state.savedMapId);
-    const restoredMap = state.data.map.find((map) => map.map_id === state.previousMapId && map.max_monsters > 0);
     if (!firstBattleMap) throw new Error("map.csv 沒有可進入的戰鬥地圖");
-    chooseMap((restoredCurrentMap ?? restoredMap ?? firstBattleMap).map_id, state.townAutoReturn);
-    openWelcomePanel();
+    if (saveLoaded) {
+      forceSafeTown();
+      state.paused = true;
+      await persistPlayerSave(false, true);
+    } else {
+      forceSafeTown();
+      state.paused = true;
+    }
+    updatePauseButton();
+    if (saveLoaded) openWelcomePanel();
     $("#pause-button").addEventListener("click", togglePause);
     $("#save-status").textContent = `${saveLoaded ? "進度已載入" : "新存檔"} · ${DreamerSaveManager.storageMode === "indexeddb" ? "瀏覽器存檔" : "本機 JSON"}`;
     setInterval(persistPlayerSave, 5000);
@@ -75,6 +84,7 @@ async function init() {
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") persistPlayerSave(true); });
     state.lastTime = performance.now();
     requestAnimationFrame(loop);
+    if (!saveLoaded) { await renderSaveManagerPanel(); $("#save-manager-dialog").showModal(); }
   } catch (error) {
     $("#status").textContent = "資料載入失敗";
     addLog(`無法載入遊戲資料：${error.message}。資料來源：${globalThis.DreamerRuntime?.dataSource ?? "尚未判定"}。`);
@@ -85,7 +95,7 @@ function exportPlayerSave() {
   return {
     version: 1,
     saveVersion: 1,
-    gameVersion: globalThis.DreamerSaveManager?.GAME_VERSION ?? "0.1.0",
+    gameVersion: globalThis.DreamerSaveManager?.GAME_VERSION ?? String(systemSettings().Game_version ?? "unknown"),
     teamName: state.teamName,
     gold: state.gold,
     inventory: state.inventory.map((entry) => entry.isEquipment
@@ -93,6 +103,7 @@ function exportPlayerSave() {
       : { key: entry.key || entry.itemId, itemId: entry.itemId, quantity: entry.quantity, locked: Boolean(entry.locked), isEquipment: false }),
     autoSellItemIds: [...state.autoSellItemIds],
     currentMapId: state.map?.map_id ?? null,
+    paused: Boolean(state.paused),
     townAutoReturn: state.map?.map_id === "town001" && state.townAutoReturn,
     previousMapId: state.map?.map_id === "town001" ? state.previousMapId : state.map?.map_id,
     roster: state.roster.map((hero) => ({
@@ -165,15 +176,69 @@ function applyPlayerSave(saved) {
   return true;
 }
 
-async function persistPlayerSave(keepalive = false) {
-  if (!state.data || state.savePending || !globalThis.DreamerSaveManager) return;
+async function persistPlayerSave(keepalive = false, force = false) {
+  if (!state.data || !state.currentSlot || !globalThis.DreamerSaveManager || (state.saveTransition && !force)) return null;
+  if (state.savePromise) return state.savePromise;
   state.savePending = true;
-  try {
-    await DreamerSaveManager.saveGame(exportPlayerSave(), { keepalive });
+  state.savePromise = (async () => {
+    try {
+    const saved = await DreamerSaveManager.saveSlot(state.currentSlot, exportPlayerSave(), { keepalive });
     if ($("#save-status")) $("#save-status").textContent = "進度已儲存";
+    return saved;
   } catch (error) {
     if ($("#save-status")) $("#save-status").textContent = `存檔失敗：${error.message}`;
-  } finally { state.savePending = false; }
+    throw error;
+  } finally { state.savePending = false; state.savePromise = null; }
+  })();
+  return state.savePromise;
+}
+
+const transitionDelay = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+function updatePauseButton() { if ($("#pause-button")) $("#pause-button").textContent = state.paused ? "繼續" : "暫停"; }
+
+function forceSafeTown() {
+  state.enemies = [];
+  state.spawnElapsed = 0;
+  for (const hero of state.roster) { hero.buffs = []; hero.casting = null; hero.skillCooldowns = {}; }
+  state.map = null;
+  enterTown(false);
+  state.townAutoReturn = false;
+}
+
+function resetRuntimeFromSave(saved) {
+  state.enemies = []; state.inventory = []; state.gold = 0; state.drops = []; state.autoSellItemIds = new Set();
+  state.elapsed = 0; state.spawnElapsed = 0; state.savedMapId = null; state.previousMapId = null; state.townAutoReturn = false;
+  buildParty();
+  const loaded = applyPlayerSave(saved);
+  if (!loaded) grantInitialItems();
+  forceSafeTown();
+  state.paused = true;
+  updatePauseButton();
+  updateCharacterControls();
+  updateMapLocks();
+  render();
+  return loaded;
+}
+
+async function runSaveTransition(operation) {
+  if (state.saveTransition) throw new Error("已有存檔轉換正在進行");
+  state.saveTransition = true;
+  state.paused = true;
+  updatePauseButton();
+  const overlay = $("#save-transition-overlay");
+  overlay.hidden = false;
+  try {
+    await transitionDelay(1000);
+    const result = await operation();
+    await transitionDelay(1000);
+    return result;
+  } finally {
+    state.lastTime = performance.now();
+    state.saveTransition = false;
+    overlay.hidden = true;
+    updatePauseButton();
+  }
 }
 
 function validateGameData(data) {
@@ -1044,8 +1109,7 @@ function setupRecoveryPanel() {
   });
 }
 
-function saveSummaryData() {
-  const save = globalThis.DreamerSaveManager?.lastLoadedSave ?? exportPlayerSave();
+function saveSummaryData(save = globalThis.DreamerSaveManager?.lastLoadedSave) {
   const roster = Array.isArray(save?.roster) ? save.roster : [];
   const names = roster.map((member) => {
     const hero = state.roster.find((candidate) => candidate.classId === member.classId);
@@ -1061,7 +1125,7 @@ function saveSummaryData() {
   };
 }
 
-function renderSaveManagerPanel() {
+async function renderSaveManagerPanel() {
   const summary = saveSummaryData();
   $("#save-summary-character").textContent = summary.characters;
   $("#save-summary-level").textContent = summary.level;
@@ -1069,6 +1133,110 @@ function renderSaveManagerPanel() {
   $("#save-summary-game-version").textContent = summary.gameVersion;
   $("#save-summary-save-version").textContent = summary.saveVersion;
   $("#save-summary-storage").textContent = summary.storage;
+  const slots = await DreamerSaveManager.listSlots();
+  const container = $("#save-slot-list");
+  container.replaceChildren();
+  for (const slotId of [...DreamerSaveManager.SLOT_IDS, DreamerSaveManager.IMPORTED_ID]) {
+    const save = slots[slotId];
+    const row = document.createElement("section");
+    row.className = `save-slot${state.currentSlot === slotId ? " active" : ""}`;
+    const copy = document.createElement("div"); copy.className = "save-slot-copy";
+    const title = document.createElement("strong"); title.textContent = slotId === "imported" ? "Imported（外部測試）" : `Slot ${slotId.slice(4)}`;
+    const detail = document.createElement("small");
+    if (save) {
+      const data = saveSummaryData(save);
+      detail.textContent = `${data.characters}｜${data.level}｜${data.gameVersion}｜${data.savedAt}`;
+    } else detail.textContent = "空白存檔格";
+    copy.append(title, detail);
+    const actions = document.createElement("div"); actions.className = "save-slot-actions";
+    const primary = document.createElement("button"); primary.type = "button"; primary.textContent = save ? "讀取" : slotId === "imported" ? "等待匯入" : "開始新遊戲";
+    primary.disabled = !save && slotId === "imported";
+    primary.addEventListener("click", async () => {
+      try {
+        if (save) await switchSaveSlot(slotId);
+        else await startNewGameInSlot(slotId);
+      } catch (error) { showSaveManagerMessage(error.message, true); }
+    });
+    actions.append(primary);
+    if (slotId === "imported" && save) {
+      const reset = document.createElement("button"); reset.type = "button"; reset.textContent = "重置原始檔";
+      reset.addEventListener("click", async () => { if (window.confirm("確定要從 Imported Original 重建測試存檔嗎？目前測試進度會被取代。")) await resetImportedSlot(); });
+      actions.append(reset);
+    }
+    if (save) {
+      const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "刪除";
+      remove.addEventListener("click", async () => { try { await confirmAndDeleteSlot(slotId); } catch (error) { showSaveManagerMessage(error.message, true); } });
+      actions.append(remove);
+    }
+    row.append(copy, actions); container.append(row);
+  }
+  return slots;
+}
+
+function showSaveManagerMessage(text, error = false) {
+  const message = $("#save-manager-message");
+  message.textContent = text; message.classList.toggle("error", error);
+}
+
+async function switchSaveSlot(slotId, suppliedSave = null) {
+  await runSaveTransition(async () => {
+    if (state.currentSlot) await persistPlayerSave(false, true);
+    const saved = suppliedSave ?? await DreamerSaveManager.loadSlot(slotId);
+    if (!saved) throw new Error("這個存檔格沒有有效資料");
+    await DreamerSaveManager.setActiveSlot(slotId);
+    state.currentSlot = slotId;
+    if (!resetRuntimeFromSave(saved)) throw new Error("存檔資料無法建立角色狀態");
+    await persistPlayerSave(false, true);
+  });
+  await renderSaveManagerPanel();
+  if ($("#save-manager-dialog")?.open) $("#save-manager-dialog").close();
+  showSaveManagerMessage("讀取完成：已回到 town001 並暫停，請按「繼續」恢復遊戲。", false);
+}
+
+async function startNewGameInSlot(slotId) {
+  const number = slotId.slice(4);
+  if (!window.confirm(`存檔 ${number} 目前沒有遊戲資料。\n\n是否使用存檔 ${number} 開始全新遊戲？`)) return;
+  await runSaveTransition(async () => {
+    if (state.currentSlot) await persistPlayerSave(false, true);
+    resetRuntimeFromSave(null);
+    await DreamerSaveManager.setActiveSlot(slotId);
+    state.currentSlot = slotId;
+    try { await persistPlayerSave(false, true); }
+    catch (error) { state.currentSlot = null; await DreamerSaveManager.setActiveSlot(null); await DreamerSaveManager.deleteSlot(slotId); throw error; }
+  });
+  await renderSaveManagerPanel();
+  if ($("#save-manager-dialog")?.open) $("#save-manager-dialog").close();
+  showSaveManagerMessage("新遊戲建立完成：目前位於 town001 並暫停。", false);
+}
+
+async function resetImportedSlot() {
+  await runSaveTransition(async () => {
+    if (state.currentSlot) await persistPlayerSave(false, true);
+    const saved = await DreamerSaveManager.resetImportedWorking();
+    await DreamerSaveManager.setActiveSlot("imported");
+    state.currentSlot = "imported";
+    resetRuntimeFromSave(saved);
+    await persistPlayerSave(false, true);
+  });
+  await renderSaveManagerPanel();
+  if ($("#save-manager-dialog")?.open) $("#save-manager-dialog").close();
+  showSaveManagerMessage("Imported Working Copy 已由 Original 重建。", false);
+}
+
+async function confirmAndDeleteSlot(slotId) {
+  if (!window.confirm("確定要刪除此存檔嗎？\n\n此動作無法復原。")) return;
+  const slots = await DreamerSaveManager.listSlots();
+  const existingCount = Object.values(slots).filter(Boolean).length;
+  if (existingCount === 1 && !window.confirm("這是目前最後一個存檔。\n\n刪除後，所有遊戲存檔都會被清除。\n之後只能開始全新遊戲或重新匯入存檔。\n\n確定要繼續嗎？")) return;
+  if (state.currentSlot === slotId) {
+    await runSaveTransition(async () => {
+      await DreamerSaveManager.deleteSlot(slotId);
+      state.currentSlot = null;
+      resetRuntimeFromSave(null);
+    });
+  } else await DreamerSaveManager.deleteSlot(slotId);
+  await renderSaveManagerPanel();
+  showSaveManagerMessage("存檔已刪除；請自行選擇其他存檔或開始新遊戲。", false);
 }
 
 function setupSaveManagerPanel() {
@@ -1077,19 +1245,26 @@ function setupSaveManagerPanel() {
   const fileInput = $("#save-import-file");
   $("#save-manager-button").addEventListener("click", async () => {
     await persistPlayerSave();
-    renderSaveManagerPanel();
+    await renderSaveManagerPanel();
     message.textContent = "";
     message.classList.remove("error");
+    if ($("#recovery-dialog")?.open) $("#recovery-dialog").close();
     dialog.showModal();
   });
   $("#save-manager-close").addEventListener("click", () => dialog.close());
   $("#save-export").addEventListener("click", async () => {
     try {
-      await persistPlayerSave();
-      await DreamerSaveManager.exportSave(exportPlayerSave());
-      message.textContent = "完整存檔已匯出；目前遊戲進度與瀏覽器存檔沒有被清除。";
+      if (!state.currentSlot) throw new Error("請先建立或匯入一個存檔");
+      dialog.close();
+      await runSaveTransition(async () => {
+        if (state.savePromise) await state.savePromise;
+        forceSafeTown(); state.paused = true; updatePauseButton();
+        const saved = await persistPlayerSave(false, true);
+        await DreamerSaveManager.exportSave(saved);
+      });
+      message.textContent = "完整存檔已安全匯出；目前位於 town001 並保持暫停。";
       message.classList.remove("error");
-      renderSaveManagerPanel();
+      await renderSaveManagerPanel();
     } catch (error) {
       message.textContent = `匯出失敗：${error.message}`;
       message.classList.add("error");
@@ -1102,15 +1277,23 @@ function setupSaveManagerPanel() {
     try {
       const imported = await DreamerSaveManager.importSave(file);
       const highestLevel = Math.max(...imported.roster.map((member) => Number(member.level) || 1));
-      if (!window.confirm(`確認覆蓋目前存檔？\n匯入檔案最高角色等級：Lv.${highestLevel}\n成功後遊戲會重新整理。`)) {
+      if (!window.confirm(`確認匯入至 Imported？\n匯入檔案最高角色等級：Lv.${highestLevel}\nSlot 1～5 不會被覆蓋。`)) {
         message.textContent = "已取消匯入，目前存檔沒有變更。";
         message.classList.remove("error");
         return;
       }
-      await DreamerSaveManager.saveGame(imported);
-      message.textContent = "匯入成功，正在重新整理遊戲……";
+      dialog.close();
+      await runSaveTransition(async () => {
+        if (state.currentSlot) await persistPlayerSave(false, true);
+        const working = await DreamerSaveManager.importToImported(imported);
+        await DreamerSaveManager.setActiveSlot("imported");
+        state.currentSlot = "imported";
+        resetRuntimeFromSave(working);
+        await persistPlayerSave(false, true);
+      });
+      message.textContent = "匯入成功；Original 已保留，Working Copy 已載入 town001 並暫停。";
       message.classList.remove("error");
-      window.setTimeout(() => window.location.reload(), 300);
+      await renderSaveManagerPanel();
     } catch (error) {
       message.textContent = `匯入失敗：${error.message}`;
       message.classList.add("error");
@@ -3250,7 +3433,7 @@ function render() {
   if ($("#character-info-dialog")?.open) renderCharacterInfoPanel();
   const inTown = state.map?.map_id === "town001";
   $("#team-name").textContent = state.teamName;
-  $("#gold").textContent = state.gold.toLocaleString(); $("#status").textContent = inTown ? "村莊恢復中" : !livingParty().length ? "隊伍全滅" : state.paused ? "已暫停" : "戰鬥中";
+  $("#gold").textContent = state.gold.toLocaleString(); $("#status").textContent = state.paused ? "已暫停" : inTown ? "村莊恢復中" : !livingParty().length ? "隊伍全滅" : "戰鬥中";
   $("#spawn-timer").textContent = inTown ? "全員休息中" : state.enemies.length >= state.map?.max_monsters ? "敵群已滿" : `增援 ${Math.max(0, (state.map?.spawn_cd ?? 0) - state.spawnElapsed).toFixed(1)}s`;
   $("#drop-log").innerHTML = state.drops.length ? state.drops.map((d) => `<li><strong>${d.text}</strong><br><small>${d.source}</small></li>`).join("") : '<li class="empty">尚無掉落</li>';
   renderInventory(); renderShop();
@@ -3364,6 +3547,6 @@ function setMaxLevelBar(card) {
   bar.querySelector(".bar-current").textContent = "MAX";
   bar.querySelector(".bar-max").textContent = "";
 }
-function togglePause() { state.paused = !state.paused; $("#pause-button").textContent = state.paused ? "繼續" : "暫停"; }
+function togglePause() { if (state.saveTransition || !state.currentSlot) return; state.paused = !state.paused; updatePauseButton(); }
 
 init();

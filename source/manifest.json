@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-11T15:39:40.830Z",
+  "generatedAt": "2026-08-11T23:15:47.918Z",
   "numberFields": [
     "AAR",
     "AC",
@@ -131,7 +131,8 @@
         "base_enhance_cost",
         "recover_rate",
         "town_recover",
-        "Homepage_title"
+        "Homepage_title",
+        "Game_version"
       ],
       "expectedHeaders": [
         "exp_multiplier",
@@ -140,7 +141,8 @@
         "base_enhance_cost",
         "recover_rate",
         "town_recover",
-        "Homepage_title"
+        "Homepage_title",
+        "Game_version"
       ],
       "id": []
     },

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dreamer · 三人隊伍放置 RPG</title>
+  <link rel="icon" type="image/png" href="./assets/images/Dreamer_logo.png">
   <link rel="stylesheet" href="./style.css?v=20260811-github-save-manager">
 </head>
 <body>
@@ -173,12 +174,16 @@
         <dt>存檔版本</dt><dd id="save-summary-save-version">—</dd>
         <dt>儲存位置</dt><dd id="save-summary-storage">—</dd>
       </dl>
+      <div id="save-slot-list" class="save-slot-list" aria-label="存檔格"></div>
       <p class="save-manager-help">若需要回報遊戲問題，請按「匯出存檔」，並將下載的 JSON 存檔提供給開發者。</p>
       <p id="save-manager-message" class="save-manager-message" aria-live="polite"></p>
-      <div class="save-manager-actions"><button id="save-export" type="button">匯出存檔</button><button id="save-import" type="button">匯入存檔</button></div>
+      <div class="save-manager-actions"><button id="save-export" type="button">匯出目前存檔</button><button id="save-import" type="button">匯入至 Imported</button></div>
       <input id="save-import-file" type="file" accept="application/json,.json" hidden>
     </section>
   </dialog>
+  <div id="save-transition-overlay" class="save-transition-overlay" role="status" aria-live="assertive" hidden>
+    <div><strong>資料轉換中，請稍後</strong><span>正在安全停止遊戲並處理存檔…</span></div>
+  </div>
   <dialog id="enhance-dialog" class="attribute-dialog enhance-dialog">
     <div class="dialog-title"><strong>裝備強化</strong><button id="enhance-close" type="button" aria-label="關閉">×</button></div>
     <nav id="enhance-characters" class="attribute-characters" aria-label="選擇強化角色">
@@ -227,7 +232,7 @@
   <script src="./battleService.js?v=20260728-heal-int-half"></script>
   <script src="./csvLoader.js?v=20260811-csv-no-store"></script>
   <script src="./runtimePlatform.js?v=20260811-csv-no-store"></script>
-  <script src="./saveManager.js?v=20260811-github-save-manager"></script>
-  <script src="./game.js?v=20260811-csv-no-store"></script>
+  <script src="./saveManager.js?v=20260812-save-slots"></script>
+  <script src="./game.js?v=20260812-save-transition"></script>
 </body>
 </html>
