@@ -1,7 +1,13 @@
 "use strict";
 
 const TICK_MS = 100;
-const INVENTORY_PAGE_SIZE = 36;
+const INVENTORY_MAX_SLOTS = 1000;
+const INVENTORY_RESERVE_SLOTS = 10;
+const INVENTORY_SLOT_SIZE = 60;
+const INVENTORY_SLOT_GAP = 3;
+const INVENTORY_MAX_PAGE_BUTTONS = 10;
+const SLOT_PATTERN_BASE = "./assets/slot-patterns/";
+const DEFAULT_MID_FIG_COLOR = "#A0A0A0";
 const { combatStat, luckyRollCount, rollLuckyDamage, rollCritical, rollAttackAvoidance, mitigate, calculateAttackDamage, calculateHeal } = BattleService;
 const ATTRIBUTE_KEYS = ["STR", "CON", "INT", "WIS", "DEX", "LUK"];
 const DERIVED_STAT_KEYS = ["ATK", "MATK", "CRI", "CRI_DMG", "AC", "MR", "AAR", "SAR", "HP", "HPR", "MP", "MPR", "ADAM", "MDAM"];
@@ -12,18 +18,19 @@ const EQUIPMENT_SLOTS = [
   { key: "shield_1", positions: ["shield"] }, { key: "ring_1", positions: ["ring"] },
   { key: "ring_2", positions: ["ring"] }, { key: "kneepads_1", positions: ["kneepads"] },
   { key: "ring_3", positions: ["ring"] }, { key: "ring_4", positions: ["ring"] },
-  { key: "idol_1", positions: ["idol"] }, { key: "bracers_1", positions: ["bracers"] },
-  { key: "shoe_1", positions: ["shoe"] }, { key: "bracers_2", positions: ["bracers"] }, { key: "core_1", positions: ["core"] },
+  { key: "idol_1", positions: ["idol"] }, { key: "gloves_1", positions: ["gloves"] },
+  { key: "shoe_1", positions: ["shoe"] }, { key: "gloves_2", positions: ["gloves"] }, { key: "core_1", positions: ["core"] },
 ];
 
 const state = {
-  data: null, map: null, previousMapId: null, roster: [], party: [], enemies: [], gold: 0, drops: [], inventory: [], inventoryPage: 0,
+  data: null, map: null, previousMapId: null, roster: [], party: [], enemies: [], gold: 0, drops: [], inventory: [], inventoryPage: 0, inventoryPageCapacity: 36, inventoryColumns: 6, inventoryRows: 6, inventoryPageWindowStart: 0,
   equipmentCharacter: "A", equipmentEditSets: {}, infoCharacter: "A", attributeCharacter: "A", skillCharacter: "A", enhanceCharacter: "A", enhanceEquipmentSet: 1, enhanceEquipmentSlot: null,
   enhanceSelectedAttribute: null, enhanceSelectedType: "bless", enhanceStoneKeys: { bless: null, curse: null, chaos: null }, enhanceReturnStoneKey: null, enhanceOperation: null, shopMode: "buy", rightPage: "battle", battleLogChannel: "all", elapsed: 0, spawnElapsed: 0, paused: false, lastTime: 0, savePending: false, savePromise: null, saveTransition: false, currentSlot: null,
   savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(),
 };
 const equipmentTooltipModels = new WeakMap();
 const enhancementFlashKeyframes = new Set();
+const slotPatternStatus = new Map();
 const BULK_SHOP_EFFECTS = new Set(["HPrecover", "MPrecover", "Return_Enhance", "Chaos_Enhance", "Bless_Enhance", "Curse_Enhance"]);
 const $ = (selector) => document.querySelector(selector);
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
@@ -99,8 +106,8 @@ function exportPlayerSave() {
     teamName: state.teamName,
     gold: state.gold,
     inventory: state.inventory.map((entry) => entry.isEquipment
-      ? { key: entry.key, itemUuid: entry.itemUuid, itemId: entry.itemId, locked: Boolean(entry.locked), enhancement: entry.enhancement, quantity: 1, isEquipment: true }
-      : { key: entry.key || entry.itemId, itemId: entry.itemId, quantity: entry.quantity, locked: Boolean(entry.locked), isEquipment: false }),
+      ? { key: entry.key, itemUuid: entry.itemUuid, itemId: entry.itemId, inventoryIndex: entry.inventoryIndex, locked: Boolean(entry.locked), enhancement: entry.enhancement, quantity: 1, isEquipment: true }
+      : { key: entry.key || entry.itemId, itemId: entry.itemId, inventoryIndex: entry.inventoryIndex, quantity: entry.quantity, locked: Boolean(entry.locked), isEquipment: false }),
     autoSellItemIds: [...state.autoSellItemIds],
     currentMapId: state.map?.map_id ?? null,
     paused: Boolean(state.paused),
@@ -165,8 +172,9 @@ function applyPlayerSave(saved) {
     .map((entry) => ({ entry, item: catalogItem(entry.itemId) }))
     .filter(({ item }) => Boolean(item))
     .map(({ entry, item }) => state.data.equipment.some((candidate) => candidate.item_id === entry.itemId)
-      ? { ...normalizeEquipmentInstance(entry), name: item.item_name, quantity: 1, isEquipment: true }
-      : { key: entry.key || entry.itemId, itemId: entry.itemId, name: item.item_name, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), locked: Boolean(entry.locked), isEquipment: false });
+      ? { ...normalizeEquipmentInstance(entry), inventoryIndex: Number(entry.inventoryIndex), name: item.item_name, quantity: 1, isEquipment: true }
+      : { key: entry.key || entry.itemId, itemId: entry.itemId, inventoryIndex: Number(entry.inventoryIndex), name: item.item_name, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), locked: Boolean(entry.locked), isEquipment: false });
+  normalizeInventoryIndices();
   state.autoSellItemIds = new Set((saved.autoSellItemIds ?? []).filter((itemId) => catalogItem(itemId)));
   ensureUniqueEquipmentUuids();
   state.savedMapId = saved.currentMapId ?? null;
@@ -363,7 +371,7 @@ function showEquipment(slot) {
     cell.classList.toggle("mirror-equipment", Boolean(item && source.isMirror));
     cell.style.setProperty("--mirror-color", indexedColor("left_Mirror_color"));
     cell.textContent = item ? equipmentButtonText(item, equipped) : equipmentSlotLabel(positions[0]);
-    applyEnhancementVisual(cell, equipped);
+    applyEnhancementVisual(cell, equipped, item);
     assignEquipmentTooltip(cell, item, source?.isMirror ? `鏡像自 Set ${source.sourceSet}` : "點擊卸下", equipped);
     if (!item) cell.title = "尚未裝備";
     cell.setAttribute("aria-label", item
@@ -406,9 +414,14 @@ function equipmentSetNumber(value) {
 }
 
 function normalizeEquipmentMap(source = {}) {
-  return Object.fromEntries(Object.entries(source ?? {})
+  const migrated = { ...(source ?? {}) };
+  for (const [legacyKey, currentKey] of [["bracers", "gloves_1"], ["bracers_1", "gloves_1"], ["bracers_2", "gloves_2"]]) {
+    if (migrated[legacyKey] && !migrated[currentKey]) migrated[currentKey] = migrated[legacyKey];
+    delete migrated[legacyKey];
+  }
+  return Object.fromEntries(Object.entries(migrated)
     .filter(([slot, equipped]) => EQUIPMENT_SLOTS.some((candidate) => candidate.key === slot)
-      && state.data.equipment.some((item) => item.item_id === equipped?.itemId))
+      && state.data.equipment.some((item) => item.item_id === (equipped?.itemId ?? equipped?.item_id)))
     .map(([slot, equipped]) => [slot, normalizeEquipmentInstance(equipped)]));
 }
 
@@ -515,6 +528,12 @@ function darkenHexColor(color, factor = .52) {
 
 function enhancementStarPositions(count) {
   const total = Math.max(0, Math.trunc(Number(count) || 0));
+  if (total === 16) {
+    const positions = [];
+    for (let column = 1; column <= 5; column++) positions.push({ gridColumn: column, gridRow: 1 }, { gridColumn: column, gridRow: 5 });
+    for (let row = 2; row <= 4; row++) positions.push({ gridColumn: 1, gridRow: row }, { gridColumn: 5, gridRow: row });
+    return positions;
+  }
   if (total <= 10) {
     const bottomCount = Math.min(5, total);
     const topCount = Math.max(0, total - bottomCount);
@@ -534,7 +553,60 @@ function enhancementStarPositions(count) {
   });
 }
 
-function applyEnhancementVisual(element, instance) {
+function validSlotPatternName(value) {
+  const name = String(value ?? "").trim();
+  return /^[^\\/:*?"<>|]+\.png$/i.test(name) ? name : "";
+}
+
+function optionalCssColor(value, fallback = "") {
+  const color = String(value ?? "").trim();
+  return /^#[0-9A-Fa-f]{6}$/.test(color) ? color.toUpperCase() : fallback;
+}
+
+function monitorSlotPattern(path) {
+  if (!path || slotPatternStatus.has(path) || typeof Image === "undefined") return;
+  slotPatternStatus.set(path, "loading");
+  const image = new Image();
+  image.onload = () => slotPatternStatus.set(path, "loaded");
+  image.onerror = () => {
+    slotPatternStatus.set(path, "missing");
+    console.warn(`[Dream-Crafter] mid_figure 圖檔載入失敗：${path}`);
+    document.querySelectorAll?.(".slot-mid-figure").forEach((layer) => {
+      if (layer.dataset.patternPath === path) layer.remove();
+    });
+  };
+  image.src = path;
+}
+
+function createMidFigureLayer(sourceItem, setting, flashDelay) {
+  const requestedName = String(sourceItem?.mid_figure ?? "").trim();
+  const fileName = validSlotPatternName(requestedName);
+  if (requestedName && !fileName && !slotPatternStatus.has(`invalid:${requestedName}`)) {
+    slotPatternStatus.set(`invalid:${requestedName}`, "missing");
+    console.warn(`[Dream-Crafter] mid_figure 檔名不合法，已略過：${requestedName}`);
+  }
+  if (!fileName || typeof document?.createElement !== "function") return null;
+  const path = `${SLOT_PATTERN_BASE}${encodeURIComponent(fileName)}`;
+  if (slotPatternStatus.get(path) === "missing") return null;
+  monitorSlotPattern(path);
+  const layer = document.createElement("span");
+  layer.className = "slot-mid-figure";
+  layer.dataset.patternPath = path;
+  layer.setAttribute("aria-hidden", "true");
+  layer.style.setProperty("--slot-mid-mask", `url("${path}")`);
+  layer.style.setProperty("--slot-mid-color", optionalCssColor(sourceItem?.mid_fig_color, DEFAULT_MID_FIG_COLOR));
+  const flashMidColor = optionalCssColor(setting?.flash_mid_shading);
+  if (setting && flashDelay > 0 && flashMidColor) {
+    layer.style.setProperty("--enhance-flash-mid-color", flashMidColor);
+    layer.style.animationName = ensureEnhancementMidFlashKeyframes(flashDelay);
+    layer.style.animationDuration = `${flashDelay + 15}s`;
+    layer.style.animationTimingFunction = "linear";
+    layer.style.animationIterationCount = "infinite";
+  }
+  return layer;
+}
+
+function applyEnhancementVisual(element, instance, sourceItem = null) {
   const setting = enhancementLevelSetting(instance);
   const levelColor = setting ? csvColor(setting.enhance_color, "#ffffff") : "#ffffff";
   const starColor = setting ? csvColor(setting.star_color, levelColor) : "#ffffff";
@@ -542,6 +614,7 @@ function applyEnhancementVisual(element, instance) {
   const flashName = setting ? csvColor(setting.flash_name, levelColor) : "#ffffff";
   element.style.color = setting ? levelColor : "";
   element.style.whiteSpace = "pre-line";
+  element.classList?.toggle("slot-visual", Boolean(sourceItem));
   element.classList?.toggle("enhancement-visual", Boolean(setting));
   const flashDelay = Math.max(0, Number(setting?.is_flashing) || 0);
   element.classList?.toggle("enhancement-flash", Boolean(setting && flashDelay > 0));
@@ -560,26 +633,33 @@ function applyEnhancementVisual(element, instance) {
       element.style.setProperty("--enhance-flash-name-color", flashName);
     }
   }
-  if (!setting || typeof element.replaceChildren !== "function" || typeof document?.createElement !== "function") return;
+  if ((!sourceItem && !setting) || typeof element.replaceChildren !== "function" || typeof document?.createElement !== "function") return;
   const label = document.createElement("span");
-  label.className = "equipment-label";
+  label.className = `equipment-label${instance ? " equipment-name" : ""}`;
   label.textContent = element.textContent;
+  const midFigure = createMidFigureLayer(sourceItem, setting, flashDelay);
+  const layers = midFigure ? [midFigure, label] : [label];
   if (!starCount) {
-    element.replaceChildren(label);
+    element.replaceChildren(...layers);
     return;
   }
   const stars = document.createElement("span");
-  stars.className = "enhancement-stars-layer";
+  stars.className = `enhancement-stars-layer${starCount === 16 ? " star-frame-16" : ""}`;
   stars.setAttribute("aria-hidden", "true");
   for (const position of enhancementStarPositions(starCount)) {
     const star = document.createElement("span");
     star.className = "enhancement-star";
     star.textContent = "★";
-    star.style.left = position.left;
-    star.style.top = position.top;
+    if (position.gridColumn) {
+      star.style.gridColumn = position.gridColumn;
+      star.style.gridRow = position.gridRow;
+    } else {
+      star.style.left = position.left;
+      star.style.top = position.top;
+    }
     stars.append(star);
   }
-  element.replaceChildren(label, stars);
+  element.replaceChildren(...layers, stars);
 }
 
 function ensureEnhancementFlashKeyframes(waitSeconds) {
@@ -598,6 +678,23 @@ function ensureEnhancementFlashKeyframes(waitSeconds) {
     style.textContent = `@keyframes ${name}{0%,${waitPercent}%{background-color:var(--enhance-flash-base-bg);color:var(--enhance-flash-base-name)}${fadeInPercent}%,${holdPercent}%{background-color:var(--enhance-flash-shading);color:var(--enhance-flash-name-color)}100%{background-color:var(--enhance-flash-base-bg);color:var(--enhance-flash-base-name)}}`;
     document.head.append(style);
   }
+  return name;
+}
+
+function ensureEnhancementMidFlashKeyframes(waitSeconds) {
+  const wait = Math.max(0, Number(waitSeconds) || 0);
+  const key = Math.round(wait * 1000);
+  const name = `enhance-mid-flash-${key}`;
+  if (enhancementFlashKeyframes.has(name)) return name;
+  enhancementFlashKeyframes.add(name);
+  const total = wait + 15;
+  const waitPercent = wait / total * 100;
+  const fadeInPercent = (wait + 5) / total * 100;
+  const holdPercent = (wait + 10) / total * 100;
+  const style = document.createElement("style");
+  style.dataset.enhancementFlash = name;
+  style.textContent = `@keyframes ${name}{0%,${waitPercent}%{background-color:var(--slot-mid-color)}${fadeInPercent}%,${holdPercent}%{background-color:var(--enhance-flash-mid-color)}100%{background-color:var(--slot-mid-color)}}`;
+  document.head.append(style);
   return name;
 }
 
@@ -744,29 +841,132 @@ function itemTooltip(item) {
 }
 
 function equipmentSlotLabel(position) {
-  return { necklace:"項鍊", earrings:"耳環", helmet:"頭盔", physical_weapon:"武器", magic_weapon:"武器", body:"盔甲", shield:"副手", ring:"戒指", kneepads:"護膝", idol:"神像", bracers:"護腕", shoe:"鞋子", core:"核心" }[position] ?? position;
+  return { necklace:"項鍊", earrings:"耳環", helmet:"頭盔", physical_weapon:"武器", magic_weapon:"武器", body:"盔甲", shield:"副手", ring:"戒指", kneepads:"護膝", idol:"神像", gloves:"護腕", shoe:"鞋子", core:"核心" }[position] ?? position;
 }
 
 function buildInventoryGrid() {
   const grid = $("#inventory-grid");
-  for (let i = 0; i < INVENTORY_PAGE_SIZE; i++) {
+  grid.replaceChildren();
+  for (let i = 0; i < state.inventoryPageCapacity; i++) {
     const cell = document.createElement("button"); cell.type = "button"; cell.disabled = true;
     cell.addEventListener("click", () => useInventoryCell(i)); grid.append(cell);
   }
 }
 
 function setupInventoryPages() {
-  for (const button of document.querySelectorAll(".inventory-pages button")) {
-    button.addEventListener("click", () => {
-      selectInventoryPage(Number(button.dataset.page));
-      renderInventory();
-    });
-  }
+  const recalculate = () => recalculateInventoryLayout();
+  if (typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver(recalculate);
+    observer.observe($(".field-box"));
+  } else window.addEventListener("resize", recalculate);
+  requestAnimationFrame(recalculate);
 }
 
 function selectInventoryPage(page) {
-  state.inventoryPage = clamp(Math.trunc(Number(page) || 0), 0, 9);
-  document.querySelectorAll(".inventory-pages button").forEach((button) => button.classList.toggle("active", Number(button.dataset.page) === state.inventoryPage));
+  state.inventoryPage = clamp(Math.trunc(Number(page) || 0), 0, inventoryPageCount() - 1);
+  if (state.inventoryPage < state.inventoryPageWindowStart) state.inventoryPageWindowStart = state.inventoryPage;
+  if (state.inventoryPage >= state.inventoryPageWindowStart + INVENTORY_MAX_PAGE_BUTTONS) state.inventoryPageWindowStart = state.inventoryPage - INVENTORY_MAX_PAGE_BUTTONS + 1;
+  renderInventoryPagination();
+}
+
+function inventoryEntryAt(inventoryIndex) {
+  return state.inventory.find((entry) => entry.inventoryIndex === inventoryIndex) ?? null;
+}
+
+function usedInventoryIndices(excluding = null) {
+  return new Set(state.inventory.filter((entry) => entry !== excluding).map((entry) => entry.inventoryIndex).filter((index) => Number.isInteger(index) && index >= 0 && index < INVENTORY_MAX_SLOTS));
+}
+
+function firstFreeInventoryIndex(preferredIndex = null, excluding = null) {
+  const used = usedInventoryIndices(excluding);
+  const preferred = Number(preferredIndex);
+  if (Number.isInteger(preferred) && preferred >= 0 && preferred < INVENTORY_MAX_SLOTS && !used.has(preferred)) return preferred;
+  for (let index = 0; index < INVENTORY_MAX_SLOTS; index++) if (!used.has(index)) return index;
+  return -1;
+}
+
+function compactInventory() {
+  state.inventory = state.inventory
+    .map((entry, order) => ({ entry, order, index: Number(entry.inventoryIndex) }))
+    .sort((left, right) => {
+      const leftValid = Number.isInteger(left.index) && left.index >= 0 && left.index < INVENTORY_MAX_SLOTS;
+      const rightValid = Number.isInteger(right.index) && right.index >= 0 && right.index < INVENTORY_MAX_SLOTS;
+      if (leftValid !== rightValid) return leftValid ? -1 : 1;
+      return leftValid && left.index !== right.index ? left.index - right.index : left.order - right.order;
+    })
+    .slice(0, INVENTORY_MAX_SLOTS)
+    .map(({ entry }, inventoryIndex) => { entry.inventoryIndex = inventoryIndex; return entry; });
+  state.inventoryPage = clamp(state.inventoryPage, 0, inventoryPageCount() - 1);
+  state.inventoryPageWindowStart = clamp(state.inventoryPageWindowStart, 0, Math.max(0, inventoryPageCount() - INVENTORY_MAX_PAGE_BUTTONS));
+  renderInventoryPagination();
+  return state.inventory;
+}
+
+function normalizeInventoryIndices() {
+  return compactInventory();
+}
+
+function removeInventoryEntryAt(arrayIndex) {
+  if (!Number.isInteger(arrayIndex) || arrayIndex < 0 || arrayIndex >= state.inventory.length) return null;
+  const [removed] = state.inventory.splice(arrayIndex, 1);
+  compactInventory();
+  return removed ?? null;
+}
+
+function inventoryPageCount() {
+  const capacity = Math.max(1, state.inventoryPageCapacity);
+  const highest = state.inventory.reduce((maximum, entry) => Math.max(maximum, Number(entry.inventoryIndex) || 0), -1);
+  const accessibleSlots = Math.min(INVENTORY_MAX_SLOTS, Math.max(capacity, highest + 1 + INVENTORY_RESERVE_SLOTS));
+  return Math.max(1, Math.ceil(accessibleSlots / capacity));
+}
+
+function renderInventoryPagination() {
+  const pagination = document.querySelector(".inventory-pages");
+  if (!pagination) return;
+  const pageCount = inventoryPageCount();
+  state.inventoryPage = clamp(state.inventoryPage, 0, pageCount - 1);
+  const maxStart = Math.max(0, pageCount - INVENTORY_MAX_PAGE_BUTTONS);
+  state.inventoryPageWindowStart = clamp(state.inventoryPageWindowStart, 0, maxStart);
+  if (state.inventoryPage < state.inventoryPageWindowStart) state.inventoryPageWindowStart = state.inventoryPage;
+  if (state.inventoryPage >= state.inventoryPageWindowStart + INVENTORY_MAX_PAGE_BUTTONS) state.inventoryPageWindowStart = state.inventoryPage - INVENTORY_MAX_PAGE_BUTTONS + 1;
+  const signature = `${pageCount}:${state.inventoryPage}:${state.inventoryPageWindowStart}`;
+  if (pagination.dataset.renderSignature === signature) return;
+  pagination.dataset.renderSignature = signature;
+  pagination.replaceChildren();
+  const makeButton = (text, action, disabled = false, active = false) => {
+    const button = document.createElement("button");
+    button.type = "button"; button.textContent = text; button.disabled = disabled; button.classList.toggle("active", active);
+    button.addEventListener("click", action); pagination.append(button);
+  };
+  makeButton("‹", () => { state.inventoryPageWindowStart = Math.max(0, state.inventoryPageWindowStart - INVENTORY_MAX_PAGE_BUTTONS); renderInventoryPagination(); }, state.inventoryPageWindowStart === 0);
+  const end = Math.min(pageCount, state.inventoryPageWindowStart + INVENTORY_MAX_PAGE_BUTTONS);
+  for (let page = state.inventoryPageWindowStart; page < end; page++) makeButton(String(page + 1), () => { selectInventoryPage(page); renderInventory(); }, false, page === state.inventoryPage);
+  makeButton("›", () => { state.inventoryPageWindowStart = Math.min(maxStart, state.inventoryPageWindowStart + INVENTORY_MAX_PAGE_BUTTONS); renderInventoryPagination(); }, end >= pageCount);
+}
+
+function recalculateInventoryLayout() {
+  const grid = $("#inventory-grid");
+  const field = $(".field-box");
+  if (!grid || !field) return;
+  const oldCapacity = Math.max(1, state.inventoryPageCapacity);
+  const anchorIndex = state.inventoryPage * oldCapacity;
+  const styles = getComputedStyle(grid);
+  const horizontalPadding = parseFloat(styles.paddingLeft || 0) + parseFloat(styles.paddingRight || 0);
+  const verticalPadding = parseFloat(styles.paddingTop || 0) + parseFloat(styles.paddingBottom || 0);
+  const width = Math.max(INVENTORY_SLOT_SIZE, grid.clientWidth - horizontalPadding);
+  const pageHeight = document.querySelector(".inventory-pages")?.offsetHeight || 38;
+  const height = Math.max(INVENTORY_SLOT_SIZE, field.clientHeight - pageHeight - verticalPadding - 2);
+  const columns = Math.max(1, Math.floor((width + INVENTORY_SLOT_GAP) / (INVENTORY_SLOT_SIZE + INVENTORY_SLOT_GAP)));
+  const rows = Math.max(1, Math.floor((height + INVENTORY_SLOT_GAP) / (INVENTORY_SLOT_SIZE + INVENTORY_SLOT_GAP)));
+  const capacity = Math.max(1, columns * rows);
+  if (capacity === state.inventoryPageCapacity && columns === state.inventoryColumns && rows === state.inventoryRows) return;
+  state.inventoryColumns = columns; state.inventoryRows = rows; state.inventoryPageCapacity = capacity;
+  grid.style.setProperty("--inventory-columns", columns);
+  grid.style.setProperty("--inventory-rows", rows);
+  state.inventoryPage = clamp(Math.floor(anchorIndex / capacity), 0, inventoryPageCount() - 1);
+  buildInventoryGrid();
+  renderInventoryPagination();
+  renderInventory();
 }
 
 function buildParty() {
@@ -1562,7 +1762,7 @@ function consumeInventoryEntry(entry) {
   const index = state.inventory.indexOf(entry);
   if (index < 0) return false;
   if (entry.quantity > 1) entry.quantity -= 1;
-  else state.inventory.splice(index, 1);
+  else removeInventoryEntryAt(index);
   return true;
 }
 
@@ -1715,7 +1915,7 @@ function renderEnhancePanelLegacy() {
     button.classList.remove("mirror-equipment");
     button.classList.toggle("selected", button.dataset.slot === state.enhanceEquipmentSlot && Boolean(item));
     button.textContent = item ? equipmentButtonText(item, equipped) : equipmentSlotLabel(button.dataset.position.split(",")[0]);
-    applyEnhancementVisual(button, equipped);
+    applyEnhancementVisual(button, equipped, item);
     assignEquipmentTooltip(button, item, `Set ${selectedSet}；點擊選擇`, equipped);
     if (!item) button.title = "尚未裝備";
   }
@@ -1847,7 +2047,7 @@ function renderEnhancePanel() {
     button.classList.remove("mirror-equipment");
     button.classList.toggle("selected", button.dataset.slot === state.enhanceEquipmentSlot && Boolean(item));
     button.textContent = item ? equipmentButtonText(item, equipped) : equipmentSlotLabel(button.dataset.position.split(",")[0]);
-    applyEnhancementVisual(button, equipped);
+    applyEnhancementVisual(button, equipped, item);
     assignEquipmentTooltip(button, item, `Set ${selectedSet}：點選後強化`, equipped);
   }
 
@@ -2107,7 +2307,7 @@ function createSkillRow(skill, learned, enabled, hero = null) {
   if (skill.cast_time) {
     const cast = document.createElement("span"); cast.className = "skill-emphasis"; cast.textContent = `施法 ${skill.cast_time}s`; detail.append(cast);
   }
-  if (String(skill.skill_intro ?? "").trim()) {
+  if (learned && String(skill.skill_intro ?? "").trim()) {
     const intro = document.createElement("span");
     intro.className = "skill-intro";
     intro.textContent = String(skill.skill_intro).trim();
@@ -2251,6 +2451,7 @@ function autoSellExistingInventory(itemId) {
     quantity += entry.isEquipment ? 1 : Math.max(1, Math.trunc(Number(entry.quantity) || 1));
     state.inventory.splice(index, 1);
   }
+  if (quantity > 0) compactInventory();
   const gold = quantity * price;
   state.gold += gold;
   if (quantity > 0) addLog(`自動賣出 ${item.item_name} × ${quantity}，獲得 ${gold} 金幣。`);
@@ -2334,7 +2535,7 @@ function sellInventoryItem(identifier, requestedQuantity = 1) {
   if (fallbackIndex < 0 || inventoryItem?.locked || price === null || quantity === null
     || (inventoryItem?.isEquipment && normalizeEnhancement(inventoryItem).level >= 1)) return false;
   if (available > quantity) inventoryItem.quantity = available - quantity;
-  else state.inventory.splice(fallbackIndex, 1);
+  else removeInventoryEntryAt(fallbackIndex);
   state.gold += price * quantity;
   addLog(`商店收購 ${itemData.item_name} × ${quantity}，獲得 ${price * quantity} 金幣。`);
   render();
@@ -2382,7 +2583,7 @@ function recycleInventoryEquipment(identifier, random = Math.random) {
     recovered.chaos = rollRecoveredStoneCount(enhancement.chaosCount, luck, random);
   }
 
-  state.inventory.splice(inventoryIndex, 1);
+  removeInventoryEntryAt(inventoryIndex);
   state.gold += gold;
   const stoneIds = { bless: "sp0101", curse: "sp0201", chaos: "sp0301" };
   const recoveredText = [];
@@ -3222,17 +3423,27 @@ function addInventoryItem(itemId, name, quantity, options = {}) {
   if (canStack) {
     const stack = state.inventory.find((item) => item.itemId === itemId);
     if (stack) stack.quantity += quantity;
-    else state.inventory.push({ key: itemId, itemId, name, quantity, isEquipment: false });
+    else {
+      const inventoryIndex = firstFreeInventoryIndex();
+      if (inventoryIndex < 0) return { autoSold: false, quantity: 0, gold: 0, full: true };
+      state.inventory.push({ key: itemId, itemId, name, quantity, inventoryIndex, isEquipment: false });
+    }
+    renderInventoryPagination();
     return { autoSold: false, quantity, gold: 0 };
   }
+  let added = 0;
   for (let index = 0; index < quantity; index++) {
-    state.inventory.push({ ...normalizeEquipmentInstance({ itemId }), name, quantity: 1, isEquipment });
+    const inventoryIndex = firstFreeInventoryIndex();
+    if (inventoryIndex < 0) break;
+    state.inventory.push({ ...normalizeEquipmentInstance({ itemId }), inventoryIndex, name, quantity: 1, isEquipment });
+    added++;
   }
-  return { autoSold: false, quantity, gold: 0 };
+  renderInventoryPagination();
+  return { autoSold: false, quantity: added, gold: 0, full: added < quantity };
 }
 
 function useInventoryCell(visibleIndex) {
-  const inventoryIndex = state.inventoryPage * INVENTORY_PAGE_SIZE + visibleIndex;
+  const inventoryIndex = state.inventoryPage * state.inventoryPageCapacity + visibleIndex;
   const result = useInventoryItem(inventoryIndex);
   if (result.message) addLog(result.message);
   if (result.equipmentChanged) showEquipment(state.equipmentCharacter);
@@ -3241,7 +3452,8 @@ function useInventoryCell(visibleIndex) {
 }
 
 function useInventoryItem(inventoryIndex) {
-  const inventoryItem = state.inventory[inventoryIndex];
+  const arrayIndex = state.inventory.findIndex((entry) => entry.inventoryIndex === inventoryIndex);
+  const inventoryItem = arrayIndex >= 0 ? state.inventory[arrayIndex] : null;
   if (!inventoryItem) return { used: false, message: "" };
   if (inventoryItem.isEquipment) {
     const hero = state.party.find((member) => member.slot === state.equipmentCharacter);
@@ -3259,7 +3471,7 @@ function useInventoryItem(inventoryIndex) {
     const conflictSlot = findWeaponShieldConflict(hero, item, editSet);
     const conflict = conflictSlot ? equipment[conflictSlot] : null;
     const returnedNames = [];
-    state.inventory.splice(inventoryIndex, 1);
+    state.inventory.splice(arrayIndex, 1);
     let returnIndex = inventoryIndex;
     if (replaced) {
       returnedNames.push(state.data.equipment.find((row) => row.item_id === replaced.itemId)?.item_name ?? replaced.itemId);
@@ -3270,6 +3482,7 @@ function useInventoryItem(inventoryIndex) {
       returnEquippedItemToInventory(conflict, returnIndex++);
       delete equipment[conflictSlot];
     }
+    compactInventory();
     equipment[slotKey] = normalizeEquipmentInstance(inventoryItem);
     recalculateHeroStats(hero);
     return { used: true, equipmentChanged: true, hero, item, message: `${hero.name} 的 Set ${editSet} 裝備 ${item.item_name}${returnedNames.length ? `，${returnedNames.join("、")}已放回道具欄` : ""}。` };
@@ -3286,7 +3499,7 @@ function useInventoryItem(inventoryIndex) {
   if (hero.level < skill.level) return { used: false, message: `${hero.name} 需要 Lv.${skill.level} 才能學習 ${skill.name}。` };
   if (hero.learnedSkillIds.has(skill.skill_id)) return { used: false, message: `${hero.name} 已經學會 ${skill.name}。` };
   if (!learnSkill(hero, skill.skill_id)) return { used: false, message: `${skill.name} 學習失敗。` };
-  if (inventoryItem.quantity > 1) inventoryItem.quantity -= 1; else state.inventory.splice(inventoryIndex, 1);
+  if (inventoryItem.quantity > 1) inventoryItem.quantity -= 1; else removeInventoryEntryAt(arrayIndex);
   return { used: true, hero, skill, message: `${hero.name} 使用技能書，學會 ${skill.name}。` };
 }
 
@@ -3305,7 +3518,7 @@ function useRecoveryItem(hero, item, automatic = false) {
   const restored = round(Math.min(amount, maximum - current));
   if (isHp) hero.hp = round(hero.hp + restored); else hero.mp = round(hero.mp + restored);
   const entry = state.inventory[inventoryIndex];
-  if ((entry.quantity ?? 1) > 1) entry.quantity -= 1; else state.inventory.splice(inventoryIndex, 1);
+  if ((entry.quantity ?? 1) > 1) entry.quantity -= 1; else removeInventoryEntryAt(inventoryIndex);
   hero.itemCooldowns[item.item_id] = cooldown;
   const message = `${hero.name}${automatic ? "自動" : ""}使用 ${item.item_name}，恢復 ${restored} ${isHp ? "HP" : "MP"}。`;
   if (automatic) addLog(message, { channel: "player" });
@@ -3315,12 +3528,12 @@ function useRecoveryItem(hero, item, automatic = false) {
 function returnEquippedItemToInventory(equipped, preferredIndex = null) {
   const item = state.data.equipment.find((row) => row.item_id === equipped.itemId);
   if (!item) return -1;
-  const entry = { ...normalizeEquipmentInstance(equipped), name: item.item_name, quantity: 1, isEquipment: true };
-  const insertAt = preferredIndex === null
-    ? state.inventory.length
-    : clamp(Math.trunc(Number(preferredIndex) || 0), 0, state.inventory.length);
-  state.inventory.splice(insertAt, 0, entry);
-  return insertAt;
+  const inventoryIndex = firstFreeInventoryIndex(preferredIndex);
+  if (inventoryIndex < 0) return -1;
+  const entry = { ...normalizeEquipmentInstance(equipped), inventoryIndex, name: item.item_name, quantity: 1, isEquipment: true };
+  state.inventory.push(entry);
+  renderInventoryPagination();
+  return inventoryIndex;
 }
 
 function findWeaponShieldConflict(hero, item, setNumber = hero?.activeEquipmentSet) {
@@ -3333,23 +3546,24 @@ function findWeaponShieldConflict(hero, item, setNumber = hero?.activeEquipmentS
 
 function unequipItem(characterSlot, equipmentSlot) {
   const hero = state.party.find((member) => member.slot === characterSlot);
-  const returnedIndex = state.inventory.length;
+  const returnedIndex = firstFreeInventoryIndex();
+  if (returnedIndex < 0) { addLog("背包已滿，無法卸下裝備。"); return false; }
   const editSet = hero ? editedEquipmentSet(hero) : 1;
-  const item = takeOffEquipment(hero, equipmentSlot, editSet);
+  const item = takeOffEquipment(hero, equipmentSlot, editSet, returnedIndex);
   if (!item) return false;
-  selectInventoryPage(Math.floor(returnedIndex / INVENTORY_PAGE_SIZE));
+  selectInventoryPage(Math.floor(returnedIndex / state.inventoryPageCapacity));
   addLog(`${hero.name} 從 Set ${editSet} 卸下 ${item.item_name}，已放入道具欄。`);
   showEquipment(characterSlot);
   render();
   return true;
 }
 
-function takeOffEquipment(hero, equipmentSlot, setNumber = hero?.activeEquipmentSet) {
+function takeOffEquipment(hero, equipmentSlot, setNumber = hero?.activeEquipmentSet, preferredIndex = null) {
   const equipment = equipmentConfig(hero, setNumber);
   const equipped = equipment[equipmentSlot];
   if (!hero || !equipped) return null;
   const item = state.data.equipment.find((row) => row.item_id === equipped.itemId);
-  returnEquippedItemToInventory(equipped);
+  if (returnEquippedItemToInventory(equipped, preferredIndex) < 0) return null;
   delete equipment[equipmentSlot];
   recalculateHeroStats(hero);
   return item ?? { item_name: equipped.itemId };
@@ -3479,9 +3693,9 @@ function renderPartyUnits(container) {
 
 function renderInventory() {
   const cells = [...$("#inventory-grid").children];
-  const start = state.inventoryPage * INVENTORY_PAGE_SIZE;
+  const start = state.inventoryPage * state.inventoryPageCapacity;
   cells.forEach((cell, index) => {
-    const item = state.inventory[start + index];
+    const item = inventoryEntryAt(start + index);
     const renderSignature = item
       ? JSON.stringify([
         item.key, item.itemUuid, item.itemId, item.name, item.quantity, item.locked,
@@ -3491,8 +3705,8 @@ function renderInventory() {
     if (cell.dataset.renderSignature === renderSignature) return;
     cell.dataset.renderSignature = renderSignature;
     cell.textContent = inventoryButtonText(item);
-    applyEnhancementVisual(cell, item?.isEquipment ? item : null);
     const source = item ? catalogItem(item.itemId) : null;
+    applyEnhancementVisual(cell, item?.isEquipment ? item : null, source);
     if (item?.isEquipment) assignEquipmentTooltip(cell, source, "點擊裝備", item);
     else {
       assignEquipmentTooltip(cell, null, "", null);
@@ -3501,6 +3715,7 @@ function renderInventory() {
     cell.disabled = !item;
     cell.setAttribute("aria-label", item ? `使用 ${item.name}` : "空白道具格");
   });
+  renderInventoryPagination();
 }
 
 function renderUnits(container, units, enemies) {

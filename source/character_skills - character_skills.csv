@@ -7,7 +7,7 @@ warrior,月孤斬,csk104,8,25,1,#CC6600,physical,front,25,150,0,TRUE,,,,,,,,,STR
 warrior,戰士的自我修養 Lv.11,csk105,11,50,300,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,20,60,ATK,self,10,60,STR,0.1,TRUE,10,,,,
 warrior,十字斬,csk106,13,25,1,#CC6600,physical,front,33,175,0,TRUE,HPR,middle,-300,1,,,,,,,TRUE,68,,,,
 warrior,劍氣護體,csk107,15,50,60,#FFFF00,buff,none,0,0,0,TRUE,AC,self,10,60,MR,self,10,60,STR,0.1,TRUE,38,,,,
-warrior,流星劍,csk108,18,33,3,#CC6600,physical,front,20,100,0,TRUE,ASPD,self,300,1,,,,,,,TRUE,97,,,,
+warrior,流星劍,csk108,18,33,3,#CC6600,physical,front,20,100,0,TRUE,ASPD,self,300,1,,,,,,,TRUE,97,,,,揮劍後，快速三次攻擊
 warrior,不屈意志,csk109,23,50,60,#FFFF00,buff,none,0,0,0,TRUE,HPR,self,50,60,AAR,self,10,60,CON,0.1,TRUE,37,,,,
 warrior,蒼龍破,csk110,27,40,5,#CC6600,physical,aoe,40,200,0,TRUE,,,,,,,,,STR,0.1,TRUE,96,,,,
 warrior,戰士的自我修養 Lv.31,csk111,31,100,300,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,30,60,ATK,self,20,60,STR,0.2,TRUE,9,,,,
@@ -17,10 +17,10 @@ mage,魔法之道,csk202,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,20,60,,,
 mage,豪大火球術,csk203,5,35,3,#0080FF,magic,aoe,30,150,1,TRUE,,,,,,,,,,,TRUE,68,,,,
 mage,寒冰之槍,csk204,8,35,2,#0080FF,magic,front,50,150,1,TRUE,,,,,,,,,,,TRUE,99,,,,
 mage,法師的自我修養 Lv.11,csk205,11,50,300,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,20,60,MATK,self,10,60,INT,0.1,TRUE,10,,,,
-mage,冰牢,csk206,13,11,5,#0080FF,magic,front,50,150,1,TRUE,ASPD,front,-40,20,,,,,,,TRUE,98,,,,
+mage,冰牢,csk206,13,11,5,#0080FF,magic,front,50,150,1,TRUE,ASPD,front,-40,20,,,,,,,TRUE,98,,,,冰緩前方敵人
 mage,魔法護盾,csk207,15,50,60,#FFFF00,buff,none,0,0,0,TRUE,MR,self,30,20,AC,self,20,20,WIS,0.1,TRUE,38,,,,
 mage,落雷,csk208,18,50,5,#0080FF,magic,front,50,225,1,TRUE,,,,,,,,,INT,0.2,TRUE,97,,,,
-mage,奧術空想,csk209,23,66,5,#0080FF,magic,aoe,50,150,3,TRUE,ASPD,enemy_aoe,-40,20,,,,,,,TRUE,67,,,,
+mage,奧術空想,csk209,23,66,5,#0080FF,magic,aoe,50,150,3,TRUE,ASPD,enemy_aoe,-40,20,,,,,,,TRUE,67,,,,冰緩所有敵人
 mage,連鎖閃電,csk210,27,88,5,#0080FF,magic,aoe,50,225,2,TRUE,,,,,,,,,,,TRUE,66,,,,
 mage,法師的自我修養 Lv.31,csk211,31,100,300,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,30,60,MATK,self,20,60,INT,0.2,TRUE,9,,,,
 martial,攻擊,csk300,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
@@ -31,7 +31,7 @@ martial,升龍拳,csk304,8,25,2,#CC6600,physical,front,25,200,0,TRUE,,,,,,,,,CON
 martial,武道的自我修養 Lv.11,csk305,11,50,300,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,20,60,ATK,self,10,60,CON,0.1,TRUE,10,,,,
 martial,百裂拳,csk306,13,33,5,#CC6600,physical,front,0,80,0,TRUE,ASPD,self,500,1,ADAM,self,-50,1,,,TRUE,97,,,,
 martial,鬥氣爆發,csk307,15,50,60,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,30,60,ATK,self,10,60,CON,0.1,TRUE,38,,,,
-martial,逆透勁,csk308,18,50,5,#CC6600,physical,front,50,250,0,TRUE,HPR,random,-500,1,,,,,,,TRUE,96,,,,
+martial,逆透勁,csk308,18,50,5,#CC6600,physical,front,50,250,0,TRUE,HPR,random,-500,1,,,,,,,TRUE,96,,,,隔山亂打牛
 martial,輕盈步伐,csk309,23,50,60,#FFFF00,buff,none,0,0,0,TRUE,AAR,self,15,60,SAR,self,15,60,DEX,0.1,TRUE,37,,,,
 martial,龍捲旋風腿,csk310,27,50,5,#CC6600,physical,aoe,50,300,0,TRUE,,,,,,,,,,,TRUE,68,,,,
 martial,武道的自我修養 Lv.31,csk311,31,100,300,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,30,60,MATK,self,10,60,CON,0.2,TRUE,9,,,,
