@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-12T13:13:35.917Z",
+  "generatedAt": "2026-08-13T05:46:15.609Z",
   "numberFields": [
     "AAR",
     "AC",
@@ -11,6 +11,7 @@
     "CRI",
     "CRI_DMG",
     "DEX",
+    "Death_EXP_Penalty",
     "Enhance_max",
     "Enhance_min",
     "HP",
@@ -132,17 +133,18 @@
         "recover_rate",
         "town_recover",
         "Homepage_title",
-        "Game_version"
+        "Death_EXP_Penalty"
       ],
       "expectedHeaders": [
+        "Homepage_title",
         "exp_multiplier",
         "gold_multiplier",
         "item_drop_rate",
         "base_enhance_cost",
         "recover_rate",
         "town_recover",
-        "Homepage_title",
-        "Game_version"
+        "Death_EXP_Penalty",
+        "mid_fig_size"
       ],
       "id": []
     },
@@ -415,6 +417,22 @@
       "id": [
         "color_location"
       ]
+    },
+    {
+      "file": "PatchNote - PatchNote.csv",
+      "logicalFile": "PatchNote.csv",
+      "table": "patchNotes",
+      "required": [
+        "version",
+        "type",
+        "patch_note"
+      ],
+      "expectedHeaders": [
+        "version",
+        "type",
+        "patch_note"
+      ],
+      "id": []
     },
     {
       "file": "Welcome_news - Welcome_news.csv",

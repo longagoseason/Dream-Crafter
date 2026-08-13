@@ -28,7 +28,7 @@
   }
   function configureGameVersion(value) {
     const normalized = String(value ?? "").trim();
-    if (!normalized) throw new Error("Dreamer_Syetem.csv 的 Game_version 不可空白");
+    if (!normalized) throw new Error("PatchNote.csv 無法取得 Current Game Version");
     gameVersion = normalized;
     return gameVersion;
   }
@@ -154,8 +154,8 @@
   }
   function exportFileName(date = new Date()) {
     const pad = (value) => String(value).padStart(2, "0");
-    const safeVersion = gameVersion.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
-    return `dream-crafter-save-${safeVersion}-${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}.json`;
+    const safeVersion = gameVersion.replace(/^ver/i, "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+    return `dream-crafter-save-ver${safeVersion}-${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}.json`;
   }
   async function exportSave(save = lastLoadedSave) {
     if (!save) throw new Error("目前沒有可匯出的存檔");

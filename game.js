@@ -8,7 +8,8 @@ const INVENTORY_SLOT_GAP = 3;
 const INVENTORY_MAX_PAGE_BUTTONS = 10;
 const SLOT_PATTERN_BASE = "./assets/slot-patterns/";
 const DEFAULT_MID_FIG_COLOR = "#A0A0A0";
-const { combatStat, luckyRollCount, rollLuckyDamage, rollCritical, rollAttackAvoidance, mitigate, calculateAttackDamage, calculateHeal } = BattleService;
+const DEFAULT_MID_FIG_SIZE = 80;
+const { combatStat, luckyRollCount, rollLuckyRange, rollCritical, rollAttackAvoidance, mitigate, calculateAttackDamage, calculateHeal } = BattleService;
 const ATTRIBUTE_KEYS = ["STR", "CON", "INT", "WIS", "DEX", "LUK"];
 const DERIVED_STAT_KEYS = ["ATK", "MATK", "CRI", "CRI_DMG", "AC", "MR", "AAR", "SAR", "HP", "HPR", "MP", "MPR", "ADAM", "MDAM"];
 const EQUIPMENT_SLOTS = [
@@ -26,7 +27,7 @@ const state = {
   data: null, map: null, previousMapId: null, roster: [], party: [], enemies: [], gold: 0, drops: [], inventory: [], inventoryPage: 0, inventoryPageCapacity: 36, inventoryColumns: 6, inventoryRows: 6, inventoryPageWindowStart: 0,
   equipmentCharacter: "A", equipmentEditSets: {}, infoCharacter: "A", attributeCharacter: "A", skillCharacter: "A", enhanceCharacter: "A", enhanceEquipmentSet: 1, enhanceEquipmentSlot: null,
   enhanceSelectedAttribute: null, enhanceSelectedType: "bless", enhanceStoneKeys: { bless: null, curse: null, chaos: null }, enhanceReturnStoneKey: null, enhanceOperation: null, shopMode: "buy", rightPage: "battle", battleLogChannel: "all", elapsed: 0, spawnElapsed: 0, paused: false, lastTime: 0, savePending: false, savePromise: null, saveTransition: false, currentSlot: null,
-  savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(),
+  savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(), welcomeView: "welcome", patchNoteSeries: null,
 };
 const equipmentTooltipModels = new WeakMap();
 const enhancementFlashKeyframes = new Set();
@@ -49,7 +50,7 @@ async function init() {
     const gameData = await DreamerRuntime.loadGameData();
     state.data = gameData;
     validateGameData(state.data);
-    DreamerSaveManager.configureGameVersion(systemSettings().Game_version);
+    DreamerSaveManager.configureGameVersion(getCurrentGameVersion());
     const activeSlot = DreamerSaveManager.activeSlotId;
     const saved = activeSlot ? await DreamerSaveManager.loadSlot(activeSlot) : null;
     document.title = String(systemSettings().Homepage_title || document.title);
@@ -102,7 +103,7 @@ function exportPlayerSave() {
   return {
     version: 1,
     saveVersion: 1,
-    gameVersion: globalThis.DreamerSaveManager?.GAME_VERSION ?? String(systemSettings().Game_version ?? "unknown"),
+    gameVersion: globalThis.DreamerSaveManager?.GAME_VERSION ?? getCurrentGameVersion(),
     teamName: state.teamName,
     gold: state.gold,
     inventory: state.inventory.map((entry) => entry.isEquipment
@@ -252,7 +253,7 @@ async function runSaveTransition(operation) {
 function validateGameData(data) {
   const requiredTables = [
     "classes", "equipment", "item", "characterAttribute", "attributeIndex", "characterSkills", "monsters", "monsterSkills", "skill",
-    "map", "mapSpawn", "lootDrops", "specialLoot", "playerLevel", "dreamerSystem", "gameColorIndex", "enhanceLevel", "enhanceSaveEnchant", "enhanceOverEnchant", "enhanceChaosEnchant", "welcomeNews",
+    "map", "mapSpawn", "lootDrops", "specialLoot", "playerLevel", "dreamerSystem", "gameColorIndex", "enhanceLevel", "enhanceSaveEnchant", "enhanceOverEnchant", "enhanceChaosEnchant", "welcomeNews", "patchNotes",
   ];
   const missing = requiredTables.filter((key) => !Array.isArray(data?.[key]));
   if (missing.length) throw new Error(`資料版本不相容，缺少資料表：${missing.join("、")}`);
@@ -285,6 +286,7 @@ function applyCsvColorTheme() {
   }
   const enhanceAccent = [...(state.data?.enhanceLevel ?? [])].sort((a, b) => a.enhance_level - b.enhance_level)[0]?.enhance_color;
   rootStyle.setProperty("--enhance-ui-accent", csvColor(enhanceAccent, "#ededed"));
+  rootStyle.setProperty("--slot-mid-size", `${midFigureSizePercent()}%`);
 }
 
 function playerSkillLogColor(skill) {
@@ -293,6 +295,33 @@ function playerSkillLogColor(skill) {
 
 function systemSettings() {
   return state.data.dreamerSystem[0];
+}
+
+function midFigureSizePercent() {
+  const raw = systemSettings()?.mid_fig_size;
+  const text = String(raw ?? "").trim();
+  const numeric = text === "" ? Number.NaN : Number(text);
+  return clamp(Number.isFinite(numeric) ? numeric : DEFAULT_MID_FIG_SIZE, 0, 200);
+}
+
+function versionParts(version) {
+  const match = String(version ?? "").trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
+  return match ? match.slice(1).map(Number) : null;
+}
+
+function compareGameVersions(left, right) {
+  const a = versionParts(left) ?? [-1, -1, -1];
+  const b = versionParts(right) ?? [-1, -1, -1];
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index] !== b[index]) return a[index] - b[index];
+  }
+  return 0;
+}
+
+function getCurrentGameVersion() {
+  const versions = [...new Set((state.data?.patchNotes ?? []).map((row) => row.version).filter((version) => versionParts(version)))];
+  if (!versions.length) throw new Error("PatchNote.csv 沒有有效的 version");
+  return versions.sort(compareGameVersions).at(-1);
 }
 
 function multipliedGoldReward(baseGold) {
@@ -510,14 +539,12 @@ function equipmentButtonText(item, instance) {
   const enhanceLevel = normalizeEnhancement(instance).level;
   if (enhanceLevel > 0) lines.push(`+${enhanceLevel}`);
   const name = String(item?.item_name ?? instance?.name ?? instance?.itemId ?? "").trim();
-  const itemLevelName = /^(Lv\.\d+(?:\.\d+)?)\s+(.+)$/.exec(name);
-  if (itemLevelName) {
-    lines.push(itemLevelName[1]);
-    lines.push(...itemLevelName[2].trim().split(/\s+/).filter(Boolean));
-  } else {
-    lines.push(...name.split(/\s+/).filter(Boolean));
-  }
+  lines.push(...slotNameLines(name));
   return lines.join("\n");
+}
+
+function slotNameLines(name) {
+  return String(name ?? "").trim().split(/\s+/).filter(Boolean);
 }
 
 function darkenHexColor(color, factor = .52) {
@@ -841,7 +868,7 @@ function itemTooltip(item) {
 }
 
 function equipmentSlotLabel(position) {
-  return { necklace:"項鍊", earrings:"耳環", helmet:"頭盔", physical_weapon:"武器", magic_weapon:"武器", body:"盔甲", shield:"副手", ring:"戒指", kneepads:"護膝", idol:"神像", gloves:"護腕", shoe:"鞋子", core:"核心" }[position] ?? position;
+  return { necklace:"項鍊", earrings:"耳環", helmet:"頭盔", physical_weapon:"武器", magic_weapon:"武器", body:"盔甲", shield:"副手", ring:"戒指", kneepads:"護膝", idol:"神像", gloves:"手套", shoe:"鞋子", core:"核心" }[position] ?? position;
 }
 
 function buildInventoryGrid() {
@@ -1504,9 +1531,11 @@ function setupSaveManagerPanel() {
 function renderWelcomePanel() {
   const container = $("#welcome-lines");
   container.replaceChildren();
+  $("#welcome-dialog-title").textContent = "歡迎訊息";
+  $("#welcome-view-toggle").textContent = "Patch Note";
   for (const row of state.data.welcomeNews) {
     const line = document.createElement("p");
-    line.textContent = row.welcome_name;
+    line.textContent = String(row.welcome_name ?? "").replaceAll("{GAME_VERSION}", getCurrentGameVersion());
     line.style.color = csvColor(row.welcome_color);
     line.style.fontSize = `${Number(row.welcome_pt)}pt`;
     line.style.fontWeight = row.is_Bold ? "700" : "400";
@@ -1514,14 +1543,81 @@ function renderWelcomePanel() {
   }
 }
 
+function patchNoteSeriesList() {
+  return [...new Set(state.data.patchNotes.map((row) => versionParts(row.version)?.slice(0, 2).join(".")).filter(Boolean))]
+    .sort((left, right) => compareGameVersions(`${right}.0`, `${left}.0`));
+}
+
+function renderPatchNotePanel() {
+  const container = $("#welcome-lines");
+  container.replaceChildren();
+  $("#welcome-dialog-title").textContent = "更新紀錄";
+  $("#welcome-view-toggle").textContent = "歡迎訊息";
+  const seriesList = patchNoteSeriesList();
+  if (!seriesList.includes(state.patchNoteSeries)) state.patchNoteSeries = seriesList[0] ?? null;
+
+  const seriesNav = document.createElement("nav");
+  seriesNav.className = "patch-note-series";
+  seriesNav.setAttribute("aria-label", "Patch Note 主版本");
+  for (const series of seriesList) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = series;
+    button.classList.toggle("active", series === state.patchNoteSeries);
+    button.style.color = indexedColor("Patchnote_main_color");
+    button.addEventListener("click", () => { state.patchNoteSeries = series; renderPatchNotePanel(); });
+    seriesNav.append(button);
+  }
+  container.append(seriesNav);
+
+  const versions = [...new Set(state.data.patchNotes
+    .filter((row) => versionParts(row.version)?.slice(0, 2).join(".") === state.patchNoteSeries)
+    .map((row) => row.version))].sort((left, right) => compareGameVersions(right, left));
+  for (const version of versions) {
+    const section = document.createElement("section");
+    section.className = "patch-note-version";
+    const heading = document.createElement("h3");
+    heading.textContent = `--- Ver ${version} ---`;
+    heading.style.color = indexedColor("Patchnote_ver_color");
+    section.append(heading);
+    const rows = state.data.patchNotes.filter((row) => row.version === version);
+    const typeOrder = [...new Set(rows.map((row) => row.type))];
+    for (const type of typeOrder) {
+      const typeHeading = document.createElement("h4");
+      typeHeading.textContent = `【${type}】`;
+      typeHeading.style.color = indexedColor("Patchnote_type_color");
+      section.append(typeHeading);
+      const list = document.createElement("ul");
+      list.style.color = indexedColor("Patchnote_color");
+      for (const row of rows.filter((candidate) => candidate.type === type)) {
+        const item = document.createElement("li");
+        item.textContent = row.patch_note;
+        list.append(item);
+      }
+      section.append(list);
+    }
+    container.append(section);
+  }
+}
+
+function renderWelcomeDialogContent() {
+  if (state.welcomeView === "patch") renderPatchNotePanel();
+  else renderWelcomePanel();
+}
+
 function openWelcomePanel() {
   const dialog = $("#welcome-dialog");
-  renderWelcomePanel();
+  state.welcomeView = "welcome";
+  renderWelcomeDialogContent();
   if (!dialog.open) dialog.showModal();
 }
 
 function setupWelcomePanel() {
   $("#welcome-button").addEventListener("click", openWelcomePanel);
+  $("#welcome-view-toggle").addEventListener("click", () => {
+    state.welcomeView = state.welcomeView === "welcome" ? "patch" : "welcome";
+    renderWelcomeDialogContent();
+  });
   $("#welcome-close").addEventListener("click", () => $("#welcome-dialog").close());
 }
 
@@ -1727,10 +1823,7 @@ function formatEnhancementValue(stat, value) {
 function inventoryButtonText(item) {
   if (!item) return "";
   if (item.isEquipment) return equipmentButtonText(catalogItem(item.itemId), item);
-  const enhancementStone = enhancementStoneDisplay(catalogItem(item.itemId));
-  return enhancementStone
-    ? `${enhancementStone.level}\n${enhancementStone.name}\nx ${item.quantity}`
-    : `${item.name}\nx ${item.quantity}`;
+  return [...slotNameLines(item.name), `x ${item.quantity}`].join("\n");
 }
 
 function enhancementStoneDisplay(item) {
@@ -2419,12 +2512,12 @@ function setupShop() {
 }
 
 function canBuyItem(item) {
-  const configuredPrice = item?.buy_gold ?? item?.buy_money;
+  const configuredPrice = item?.buy_gold;
   return item?.buy_level !== null && item?.buy_level !== undefined && configuredPrice !== null && configuredPrice !== undefined && configuredPrice !== "";
 }
 
 function itemSellPrice(item) {
-  const configuredPrice = item?.sell_gold ?? item?.sell_money;
+  const configuredPrice = item?.sell_gold;
   const price = Number(configuredPrice);
   return configuredPrice !== null && configuredPrice !== undefined && configuredPrice !== "" && Number.isFinite(price) && price >= 0
     ? price
@@ -2511,7 +2604,7 @@ function normalizedShopQuantity(value, maximum = 999) {
 
 function buyInventoryItem(itemId, requestedQuantity = 1) {
   const item = state.data.item.find((candidate) => candidate.item_id === itemId);
-  const price = Number(item?.buy_gold ?? item?.buy_money);
+  const price = Number(item?.buy_gold);
   const quantity = item?.effect === "learn_skill" || !BULK_SHOP_EFFECTS.has(item?.effect) ? 1 : normalizedShopQuantity(requestedQuantity);
   const totalPrice = quantity === null ? NaN : price * quantity;
   if (!item || !canPurchaseShopItem(item) || !Number.isFinite(price) || price < 0 || !Number.isFinite(totalPrice) || state.gold < totalPrice) return false;
@@ -2631,7 +2724,7 @@ function renderShop() {
     entry.enhancement?.level ?? 0, entry.locked ? 1 : 0,
   ].join(":")).join("|");
   const signature = state.shopMode === "buy"
-    ? `buy:${highestLevel}:${purchasable.map((item) => `${item.item_id}:${item.buy_gold ?? item.buy_money}`).join("|")}`
+    ? `buy:${highestLevel}:${purchasable.map((item) => `${item.item_id}:${item.buy_gold}`).join("|")}`
     : state.shopMode === "auto-sell"
       ? `auto-sell:${[...state.autoSellItemIds].sort().join("|")}:${inventorySignature}`
       : state.shopMode === "recycle"
@@ -2641,7 +2734,7 @@ function renderShop() {
     if (state.shopMode === "buy") {
       for (const button of container.querySelectorAll("[data-buy-item-id]")) {
         const item = state.data.item.find((candidate) => candidate.item_id === button.dataset.buyItemId);
-        button.disabled = !item || state.gold < Number(item.buy_gold ?? item.buy_money);
+        button.disabled = !item || state.gold < Number(item.buy_gold);
       }
     }
     return;
@@ -2654,27 +2747,27 @@ function renderShop() {
       const empty = document.createElement("p"); empty.className = "shop-empty"; empty.textContent = "目前沒有可購買的物品"; container.append(empty); return;
     }
     for (const item of purchasable) {
-      const price = Number(item.buy_gold ?? item.buy_money);
-      const row = document.createElement("div"); row.className = "shop-row"; row.title = itemTooltip(item);
-      const copy = document.createElement("span"); copy.textContent = item.item_name;
-      const detail = document.createElement("small"); detail.textContent = `需求 Lv.${item.buy_level}`; copy.append(detail);
+      const price = Number(item.buy_gold);
+      const row = document.createElement("div"); row.className = "shop-row buy-shop-row"; row.title = itemTooltip(item);
+      const copy = document.createElement("span"); copy.className = "shop-item-name"; copy.textContent = item.item_name;
+      const priceLabel = document.createElement("span"); priceLabel.className = "shop-price"; priceLabel.textContent = `$ ${price.toLocaleString()}`;
+      priceLabel.style.color = indexedColor("left_money_color");
       const actions = document.createElement("div"); actions.className = "shop-actions";
       let quantityInput = null;
       if (BULK_SHOP_EFFECTS.has(item.effect)) {
         quantityInput = document.createElement("input"); quantityInput.type = "number"; quantityInput.min = "1"; quantityInput.max = "999"; quantityInput.step = "1"; quantityInput.value = "1";
         quantityInput.setAttribute("aria-label", `購買 ${item.item_name} 數量`);
       }
-      const button = document.createElement("button"); button.type = "button"; button.dataset.buyItemId = item.item_id; button.textContent = quantityInput ? "購買" : `購買　-${price}`; button.disabled = state.gold < price;
+      const button = document.createElement("button"); button.type = "button"; button.dataset.buyItemId = item.item_id; button.textContent = "購買"; button.disabled = state.gold < price;
       button.setAttribute("aria-label", `購買 ${item.item_name}，花費 ${price} 金幣`);
       button.addEventListener("click", (event) => {
         event.preventDefault();
         const quantity = quantityInput ? quantityInput.value : 1;
         if (!buyInventoryItem(item.item_id, quantity)) addLog(`${item.item_name} 購買失敗，請確認數量、等級與金幣。`);
       });
-      if (quantityInput) {
-        actions.append(quantityInput, button);
-        row.append(copy, actions);
-      } else row.append(copy, button);
+      if (quantityInput) actions.append(quantityInput);
+      actions.append(button);
+      row.append(copy, priceLabel, actions);
       container.append(row);
     }
     return;
@@ -2759,7 +2852,9 @@ function renderShop() {
     if (state.data.equipment.includes(item)) assignEquipmentTooltip(row, item, "", instance);
     else row.title = itemTooltip(item);
     const copy = document.createElement("span"); copy.textContent = `${instance?.isEquipment ? equipmentDisplayName(item, instance) : item.item_name} × ${quantity}`;
-    const button = document.createElement("button"); button.type = "button"; button.textContent = `賣出 1 個　+${price}`;
+    const priceLabel = document.createElement("span"); priceLabel.className = "shop-price"; priceLabel.textContent = `$ ${price.toLocaleString()}`;
+    priceLabel.style.color = indexedColor("left_money_color");
+    const button = document.createElement("button"); button.type = "button"; button.textContent = "賣出1個";
     button.disabled = Boolean(instance?.locked);
     button.setAttribute("aria-label", `賣出 ${item.item_name} 1 個，獲得 ${price} 金幣`);
     button.addEventListener("click", (event) => {
@@ -2770,7 +2865,7 @@ function renderShop() {
     if (!instance?.isEquipment && BULK_SHOP_EFFECTS.has(item.effect)) {
       const quantityInput = document.createElement("input"); quantityInput.type = "number"; quantityInput.min = "1"; quantityInput.max = String(quantity); quantityInput.step = "1"; quantityInput.value = String(quantity);
       quantityInput.setAttribute("aria-label", `賣出 ${item.item_name} 數量`);
-      const quantityButton = document.createElement("button"); quantityButton.type = "button"; quantityButton.textContent = "販賣指定數量"; quantityButton.disabled = Boolean(instance?.locked);
+      const quantityButton = document.createElement("button"); quantityButton.type = "button"; quantityButton.textContent = "販賣"; quantityButton.disabled = Boolean(instance?.locked);
       quantityButton.addEventListener("click", (event) => {
         event.preventDefault();
         if (!sellInventoryItem(identifier, quantityInput.value)) addLog(`${item.item_name} 販賣失敗，請確認數量與鎖定狀態。`);
@@ -2785,7 +2880,7 @@ function renderShop() {
       lock.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); toggleInventoryLock(identifier); });
       row.append(lock);
     }
-    row.append(copy, actions); container.append(row);
+    row.append(copy, priceLabel, actions); container.append(row);
   }
 }
 
@@ -3294,9 +3389,23 @@ function clearHeroStatuses(hero) {
   hero.hp = 0;
 }
 
+function calculateDeathExpLoss(currentExp, penaltyPercent) {
+  const experience = Math.max(0, Number(currentExp) || 0);
+  const penalty = clamp(Number(penaltyPercent) || 0, 0, 100);
+  return Math.floor(experience * penalty / 100);
+}
+
+function applyDeathExperiencePenalty(hero) {
+  const loss = calculateDeathExpLoss(hero?.exp, systemSettings().Death_EXP_Penalty);
+  if (!hero || loss <= 0) return 0;
+  hero.exp = Math.max(0, hero.exp - loss);
+  return loss;
+}
+
 function handleHeroDeath(hero, context = {}) {
   if (!hero || hero.hp > 0) return false;
   const buff = context.buff;
+  const expLoss = applyDeathExperiencePenalty(hero);
   clearHeroStatuses(hero);
   if (context.kind === "direct" && context.sourceName) {
     addLog(`${context.sourceName}使用${context.skillName || "攻擊"}造成${formatExactNumber(context.damage)}點傷害，殺死了${hero.name}。`, {
@@ -3310,6 +3419,10 @@ function handleHeroDeath(hero, context = {}) {
     });
   } else {
     addLog(`${hero.name}受到神秘力量導致 HP 持續降低的影響而安靜的倒下了。`, { channel: "player" });
+  }
+  if (expLoss > 0) {
+    const deathPenaltyText = `經驗值 ${expLoss}`;
+    addLog(`${hero.name} 死亡了，損失${deathPenaltyText}`, { channel: "player", deathPenaltyText });
   }
   return true;
 }
@@ -3592,6 +3705,7 @@ function coloredLogHtml(text, meta = {}) {
   addToken("閃避", gameColor("dodge"), "log-dodge", 8);
   addToken("暴擊", gameColor("critical_hit"), "log-critical", 9);
   if (meta.critical && meta.damage !== null && meta.damage !== undefined) addToken(formatExactNumber(meta.damage), gameColor("critical_hit"), "log-critical-damage", 7);
+  addToken(meta.deathPenaltyText, indexedColor("Death_Penalty_color"), "log-death-penalty", 10);
 
   const candidates = [];
   for (const token of tokens) {

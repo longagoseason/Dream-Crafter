@@ -19,13 +19,15 @@
     return 1 + guaranteedExtraRolls + (random() * 100 < fractionalChance ? 1 : 0);
   }
 
-  function rollLuckyDamage(actor, damageType, random = Math.random) {
-    const attribute = damageType === "physical" ? actor.STR : damageType === "magic" ? actor.INT : 0;
-    if (!attribute) return 0;
-    const rolls = luckyRollCount(actor.LUK ?? 0, random);
-    let best = 0;
-    for (let index = 0; index < rolls; index++) best = Math.max(best, attribute * (.1 + random() * .4));
-    return round(best);
+  function rollLuckyRange(minimum, maximum, luck, random = Math.random) {
+    const low = Number(minimum);
+    const high = Math.max(low, Number(maximum));
+    const rolls = luckyRollCount(luck, random);
+    let best = low;
+    for (let index = 0; index < rolls; index += 1) {
+      best = Math.max(best, low + random() * (high - low));
+    }
+    return { value: round(best), rolls, minimum: low, maximum: high };
   }
 
   function rollCritical(actor, random = Math.random) {
@@ -50,20 +52,24 @@
   function calculateAttackDamage(attacker, target, damageType, baseDamage = 0, skillMultiplier = 1, random = Math.random) {
     const isMagic = damageType === "magic";
     const base = Math.max(0, combatStat(attacker, isMagic ? "MATK" : "ATK"));
-    const luckyDamage = rollLuckyDamage(attacker, damageType, random);
+    const attribute = Math.max(0, combatStat(attacker, isMagic ? "INT" : "STR"));
+    const minimum = base + Number(baseDamage || 0);
+    const roll = rollLuckyRange(minimum, minimum + attribute, combatStat(attacker, "LUK"), random);
     const critical = rollCritical(attacker, random);
     const damageMultiplier = Math.max(0, 1 + combatStat(attacker, isMagic ? "MDAM" : "ADAM") / 100);
-    const rawDamage = (base + Number(baseDamage || 0) + luckyDamage) * skillMultiplier * critical.multiplier * damageMultiplier;
+    const rawDamage = roll.value * skillMultiplier * critical.multiplier * damageMultiplier;
     const damage = mitigate(Math.max(1, rawDamage), target, isMagic ? "MR" : "AC", attacker.level, random);
-    return { damage, luckyDamage, critical, rawDamage };
+    return { damage, roll, critical, rawDamage };
   }
 
   function calculateHeal(actor, baseDamage = 0, multiplier = 1, random = Math.random) {
+    const minimum = Math.max(0, combatStat(actor, "MATK")) + Number(baseDamage || 0);
+    const maximum = minimum + Math.max(0, combatStat(actor, "WIS") + combatStat(actor, "INT") / 2);
+    const roll = rollLuckyRange(minimum, maximum, combatStat(actor, "LUK"), random);
     const critical = rollCritical(actor, random);
-    const amount = (Math.max(0, combatStat(actor, "MATK")) + Number(baseDamage || 0) + combatStat(actor, "WIS") + combatStat(actor, "INT") / 2)
-      * multiplier * critical.multiplier * Math.max(0, 1 + combatStat(actor, "MDAM") / 100);
-    return { amount: round(amount), critical };
+    const amount = roll.value * multiplier * critical.multiplier * Math.max(0, 1 + combatStat(actor, "MDAM") / 100);
+    return { amount: round(amount), roll, critical };
   }
 
-  return { combatStat, luckyRollCount, rollLuckyDamage, rollCritical, rollAttackAvoidance, mitigate, calculateAttackDamage, calculateHeal };
+  return { combatStat, luckyRollCount, rollLuckyRange, rollCritical, rollAttackAvoidance, mitigate, calculateAttackDamage, calculateHeal };
 });
