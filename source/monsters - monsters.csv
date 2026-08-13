@@ -1,5 +1,5 @@
 monster_id,name,category,level,HP,HPR,AC,MR,ATK,MATK,AAR,SAR,ADAM,MDAM,attack_type,attack_speed,ASPD,gold_min,gold_max,loot_id,loot_multiplier
-mon001,小史萊姆,normal,1,66,0,2,0,3,0,10,0,0,0,melee,0.7,0,20,30,Drop_001,0.5
+mon001,小史萊姆,normal,1,66,0,2,0,3,0,10,0,0,0,melee,0.7,0,20,30,Drop_001,1
 mon002,大史萊姆,normal,3,155,0,5,5,5,0,10,0,0,0,melee,0.7,0,60,90,Drop_001,1
 mon003,怨靈史萊姆,normal,5,370,5,5,20,8,8,10,20,0,20,magic,1,0,100,150,Drop_001,1.5
 mon004,金屬史萊姆,normal,6,660,5,15,5,25,10,5,0,30,0,melee,0.7,50,120,180,Drop_001,2
