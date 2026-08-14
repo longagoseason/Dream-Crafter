@@ -1,7 +1,7 @@
 class_id,name,skill_id,level,cost,cooldown,skill_color,damage_type,damage_target,base_damage,multiplier,cast_time,is_book,effect1,effect1_target,effect1_value,effect1_sec,effect2,effect2_target,effect2_value,effect2_sec,effect_Attribute,effect_multi,enabled,use_priority,trigger_type,trigger_value,min_targets,skill_intro
 warrior,攻擊,csk100,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
 warrior,重擊,csk101,1,5,1,#CC6600,physical,front,0,120,0,TRUE,,,,,,,,,,,TRUE,99,,,,
-warrior,戰士之道,csk102,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,AC,self,5,60,,,,,CON,0.1,TRUE,39,,,,
+warrior,戰士之道,csk102,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,AC,self,5,60,,,,,CON,0.1,TRUE,39,,,,增強AC的能力
 warrior,氣刃斬,csk103,5,15,5,#CC6600,physical,aoe,5,125,0,TRUE,,,,,,,,,,,TRUE,69,,,,
 warrior,月孤斬,csk104,8,16,2,#CC6600,physical,front,8,140,0,TRUE,,,,,,,,,STR,0.1,TRUE,98,,,,
 warrior,戰士的自我修養 Lv.11,csk105,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,ATK,self,1,60,STR,0.1,TRUE,10,,,,
@@ -12,9 +12,9 @@ warrior,不屈意志,csk109,23,50,60,#FFFF00,buff,none,0,0,1,TRUE,HPR,self,50,60
 warrior,蒼龍破,csk110,27,60,5,#CC6600,physical,aoe,27,150,0,TRUE,,,,,,,,,STR,0.1,TRUE,96,,,,
 warrior,戰士的自我修養 Lv.31,csk111,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,10,60,ATK,self,5,60,STR,0.2,TRUE,9,,,,
 mage,魔法彈,csk200,1,0,0,#FFFFFF,magic,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
-mage,風刃,csk201,1,5,1,#0080FF,magic,front,1,120,0,TRUE,,,,,,,,,,,TRUE,69,,,,超過30歲的單身男人自動習得
+mage,風刃,csk201,1,5,1,#0080FF,magic,front,1,120,0,TRUE,,,,,,,,,,,TRUE,69,,,,風之女神幫我吹起大家的裙擺
 mage,魔法之道,csk202,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,5,60,,,,,INT,0.1,TRUE,39,,,,
-mage,火球術,csk203,5,15,3,#0080FF,magic,aoe,5,125,1,TRUE,,,,,,,,,,,TRUE,68,,,,
+mage,火球術,csk203,5,15,3,#0080FF,magic,aoe,5,125,1,TRUE,,,,,,,,,,,TRUE,68,,,,超過30歲的單身男人自動習得
 mage,寒冰之槍,csk204,8,16,2,#0080FF,magic,front,8,140,0,TRUE,,,,,,,,,,,TRUE,99,,,,
 mage,法師的自我修養 Lv.11,csk205,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,MDAM,self,5,60,MATK,self,1,60,INT,0.1,TRUE,10,,,,
 mage,冰牢,csk206,13,26,3,#0080FF,magic,front,13,160,0,TRUE,ASPD,front,-40,20,,,,,,,TRUE,98,,,,冰緩前方敵人
