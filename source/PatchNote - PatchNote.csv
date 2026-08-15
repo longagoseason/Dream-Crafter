@@ -36,3 +36,8 @@ version,type,patch_note
 0.2.012,skill,[buff] 增益技能
 0.2.012,skill,[debuff] 減益效果
 0.2.012,skill,[heal] 恢復效果
+0.2.013,system,暫時移除所有技能的 [施放時間] ，改用原本的冷卻時間來控制技能
+0.2.013,system,原本的[施放時間]其實意義上變成POE2的[攻擊時間+?秒]，並非我本意
+0.2.013,system,[冷卻]時間其實本來就是我想控制技能的方式了
+0.2.013,system,所有技能基礎攻擊間隔[Action Time]為1秒(沒變)，ASPD會影響這項變數
+0.2.013,system,[Action Time] = 1 / {1 + ASPD / 100}
