@@ -2,31 +2,31 @@ class_id,name,skill_id,level,cost,cooldown,skill_color,damage_type,damage_target
 warrior,攻擊,csk100,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
 warrior,重擊,csk101,1,5,1,#CC6600,physical,front,0,120,0,TRUE,,,,,,,,,,,TRUE,99,,,,
 warrior,戰士之道,csk102,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,AC,self,5,60,,,,,CON,0.1,TRUE,39,,,,[成長] | [buff]
-warrior,氣刃斬,csk103,5,15,5,#CC6600,physical,aoe,5,125,0,TRUE,,,,,,,,,,,TRUE,69,,,,
+warrior,氣刃斬,csk103,5,25,2,#CC6600,physical,aoe,5,125,0,TRUE,,,,,,,,,,,TRUE,69,,,,
 warrior,月孤斬,csk104,8,16,2,#CC6600,physical,front,8,140,0,TRUE,,,,,,,,,STR,0.1,TRUE,98,,,,[成長]
 warrior,戰士的自我修養 Lv.11,csk105,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,ATK,self,1,60,STR,0.1,TRUE,10,,,,[成長] | [buff]
 warrior,十字斬,csk106,13,26,3,#CC6600,physical,front,13,160,0,TRUE,HPR,middle,-300,1,,,,,,,TRUE,68,,,,
 warrior,劍氣護體,csk107,15,50,60,#FFFF00,buff,none,0,0,1,TRUE,AC,self,10,60,MR,self,10,60,STR,0.1,TRUE,38,,,,[成長] | [buff]
 warrior,流星劍,csk108,18,36,4,#CC6600,physical,front,18,100,0,TRUE,ASPD,self,300,1,,,,,,,TRUE,97,,,,[犧牲] 蠻三刀
 warrior,不屈意志,csk109,23,50,60,#FFFF00,buff,none,0,0,1,TRUE,HPR,self,50,60,AAR,self,5,60,CON,0.1,TRUE,37,,,,[成長] | [buff]
-warrior,蒼龍破,csk110,27,60,5,#CC6600,physical,aoe,27,150,0,TRUE,,,,,,,,,STR,0.1,TRUE,96,,,,[成長]
+warrior,蒼龍破,csk110,27,81,3,#CC6600,physical,aoe,27,150,0,TRUE,,,,,,,,,STR,0.1,TRUE,96,,,,[成長]
 warrior,戰士的自我修養 Lv.31,csk111,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,10,60,ATK,self,5,60,STR,0.2,TRUE,9,,,,[成長] | [buff]
 mage,魔法彈,csk200,1,0,0,#FFFFFF,magic,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
 mage,風刃,csk201,1,7,1,#0080FF,magic,front,1,130,0,TRUE,,,,,,,,,,,TRUE,99,,,,
 mage,魔法之道,csk202,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,5,60,,,,,INT,0.1,TRUE,39,,,,[成長] | [buff]
-mage,火球術,csk203,5,20,3,#0080FF,magic,aoe,5,125,1,TRUE,,,,,,,,,,,TRUE,69,,,,超過30歲轉職後習得
+mage,火球術,csk203,5,30,2,#0080FF,magic,aoe,5,125,1,TRUE,,,,,,,,,,,TRUE,69,,,,超過30歲轉職後習得
 mage,寒冰之槍,csk204,8,24,2,#0080FF,magic,front,16,160,0,TRUE,,,,,,,,,,,TRUE,98,,,,
 mage,法師的自我修養 Lv.11,csk205,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,MDAM,self,5,60,MATK,self,1,60,INT,0.1,TRUE,10,,,,[成長] | [buff]
 mage,冰牢,csk206,13,26,3,#0080FF,magic,front,13,190,1,TRUE,ASPD,front,-40,20,,,,,,,TRUE,97,,,,[debuff] 冰緩前方敵人
 mage,魔法護盾,csk207,15,50,60,#FFFF00,buff,none,0,0,1,TRUE,MR,self,5,20,AC,self,5,20,WIS,0.1,TRUE,38,,,,[成長]
 mage,落雷,csk208,18,54,4,#0080FF,magic,random,36,220,0,TRUE,,,,,,,,,INT,0.2,TRUE,96,,,,[成長]
-mage,奧術空想,csk209,23,69,5,#0080FF,magic,aoe,23,125,1,TRUE,ASPD,enemy_aoe,-40,20,,,,,,,TRUE,68,,,,[debuff] 冰緩所有敵人
-mage,連鎖閃電,csk210,27,81,5,#0080FF,magic,aoe,27,150,1,TRUE,,,,,,,,,,,TRUE,67,,,,
+mage,奧術空想,csk209,23,69,3,#0080FF,magic,aoe,23,125,1,TRUE,ASPD,enemy_aoe,-40,20,,,,,,,TRUE,68,,,,[debuff] 冰緩所有敵人
+mage,連鎖閃電,csk210,27,88,4,#0080FF,magic,aoe,27,150,1,TRUE,,,,,,,,,,,TRUE,67,,,,
 mage,法師的自我修養 Lv.31,csk211,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,MDAM,self,10,60,MATK,self,5,60,INT,0.2,TRUE,9,,,,[成長] | [buff]
 martial,攻擊,csk300,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
 martial,螺旋拳,csk301,1,5,1,#CC6600,physical,front,1,120,0,TRUE,,,,,,,,,,,TRUE,99,,,,
 martial,武鬥之道,csk302,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,,,,,STR,0.1,TRUE,39,,,,[成長] | [buff]
-martial,迴旋踢,csk303,5,15,2,#CC6600,physical,aoe,5,125,0,TRUE,,,,,,,,,CON,0.2,TRUE,69,,,,[成長]
+martial,迴旋踢,csk303,5,25,2,#CC6600,physical,aoe,5,125,0,TRUE,,,,,,,,,CON,0.2,TRUE,69,,,,[成長]
 martial,升龍拳,csk304,8,16,2,#CC6600,physical,front,8,140,0,TRUE,,,,,,,,,,,TRUE,98,,,,
 martial,武道的自我修養 Lv.11,csk305,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,ATK,self,1,60,CON,0.1,TRUE,10,,,,[成長] | [buff]
 martial,百裂拳,csk306,13,26,3,#CC6600,physical,front,13,80,0,TRUE,ASPD,self,500,1,ADAM,self,-100,1,,,TRUE,97,,,,[犧牲] 快速攻擊
