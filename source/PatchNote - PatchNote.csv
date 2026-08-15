@@ -41,3 +41,4 @@ version,type,patch_note
 0.2.013,system,[冷卻]時間其實本來就是我想控制技能的方式了
 0.2.013,system,所有技能基礎攻擊間隔[Action Time]為1秒(沒變)，ASPD會影響這項變數
 0.2.013,system,[Action Time] = 1 / {1 + ASPD / 100}
+0.2.013,balance,些微提高強化機率，現在+5強化成功機率由70%→80%
