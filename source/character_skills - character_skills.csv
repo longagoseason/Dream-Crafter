@@ -14,7 +14,7 @@ warrior,戰士的自我修養 Lv.31,csk111,31,100,300,#FFFF00,buff,none,0,0,1,TR
 mage,魔法彈,csk200,1,0,0,#FFFFFF,magic,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
 mage,風刃,csk201,1,5,1,#0080FF,magic,front,1,130,0,TRUE,,,,,,,,,,,TRUE,69,,,,
 mage,魔法之道,csk202,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,5,60,,,,,INT,0.1,TRUE,39,,,,[成長] | [buff]
-mage,火球術,csk203,5,15,3,#0080FF,magic,aoe,5,125,1,TRUE,ASPD,self,300,10,,,,,,,TRUE,68,,,,超過30歲轉職後習得
+mage,火球術,csk203,5,15,3,#0080FF,magic,aoe,5,125,1,TRUE,,,,,,,,,,,TRUE,68,,,,超過30歲轉職後習得
 mage,寒冰之槍,csk204,8,16,2,#0080FF,magic,front,8,160,1,TRUE,,,,,,,,,,,TRUE,99,,,,
 mage,法師的自我修養 Lv.11,csk205,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,MDAM,self,5,60,MATK,self,1,60,INT,0.1,TRUE,10,,,,[成長] | [buff]
 mage,冰牢,csk206,13,26,3,#0080FF,magic,front,13,190,2,TRUE,ASPD,front,-40,20,,,,,,,TRUE,98,,,,[debuff] 冰緩前方敵人
