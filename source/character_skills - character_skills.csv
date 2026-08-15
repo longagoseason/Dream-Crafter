@@ -1,61 +1,61 @@
 class_id,name,skill_id,level,cost,cooldown,skill_color,damage_type,damage_target,base_damage,multiplier,cast_time,is_book,effect1,effect1_target,effect1_value,effect1_sec,effect2,effect2_target,effect2_value,effect2_sec,effect_Attribute,effect_multi,enabled,use_priority,trigger_type,trigger_value,min_targets,skill_intro
 warrior,攻擊,csk100,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
 warrior,重擊,csk101,1,5,1,#CC6600,physical,front,0,120,0,TRUE,,,,,,,,,,,TRUE,99,,,,
-warrior,戰士之道,csk102,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,AC,self,5,60,,,,,CON,0.1,TRUE,39,,,,增強AC的能力
+warrior,戰士之道,csk102,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,AC,self,5,60,,,,,CON,0.1,TRUE,39,,,,[成長] | [buff]
 warrior,氣刃斬,csk103,5,15,5,#CC6600,physical,aoe,5,125,0,TRUE,,,,,,,,,,,TRUE,69,,,,
-warrior,月孤斬,csk104,8,16,2,#CC6600,physical,front,8,140,0,TRUE,,,,,,,,,STR,0.1,TRUE,98,,,,
-warrior,戰士的自我修養 Lv.11,csk105,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,ATK,self,1,60,STR,0.1,TRUE,10,,,,
+warrior,月孤斬,csk104,8,16,2,#CC6600,physical,front,8,140,0,TRUE,,,,,,,,,STR,0.1,TRUE,98,,,,[成長]
+warrior,戰士的自我修養 Lv.11,csk105,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,ATK,self,1,60,STR,0.1,TRUE,10,,,,[成長] | [buff]
 warrior,十字斬,csk106,13,26,3,#CC6600,physical,front,13,160,0,TRUE,HPR,middle,-300,1,,,,,,,TRUE,68,,,,
-warrior,劍氣護體,csk107,15,50,60,#FFFF00,buff,none,0,0,1,TRUE,AC,self,10,60,MR,self,10,60,STR,0.1,TRUE,38,,,,
-warrior,流星劍,csk108,18,36,4,#CC6600,physical,front,18,100,0,TRUE,ASPD,self,300,1,,,,,,,TRUE,97,,,,揮劍後，快速三次攻擊
-warrior,不屈意志,csk109,23,50,60,#FFFF00,buff,none,0,0,1,TRUE,HPR,self,50,60,AAR,self,5,60,CON,0.1,TRUE,37,,,,
-warrior,蒼龍破,csk110,27,60,5,#CC6600,physical,aoe,27,150,0,TRUE,,,,,,,,,STR,0.1,TRUE,96,,,,
-warrior,戰士的自我修養 Lv.31,csk111,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,10,60,ATK,self,5,60,STR,0.2,TRUE,9,,,,
+warrior,劍氣護體,csk107,15,50,60,#FFFF00,buff,none,0,0,1,TRUE,AC,self,10,60,MR,self,10,60,STR,0.1,TRUE,38,,,,[成長] | [buff]
+warrior,流星劍,csk108,18,36,4,#CC6600,physical,front,18,100,0,TRUE,ASPD,self,300,1,,,,,,,TRUE,97,,,,[犧牲] 蠻三刀
+warrior,不屈意志,csk109,23,50,60,#FFFF00,buff,none,0,0,1,TRUE,HPR,self,50,60,AAR,self,5,60,CON,0.1,TRUE,37,,,,[成長] | [buff]
+warrior,蒼龍破,csk110,27,60,5,#CC6600,physical,aoe,27,150,0,TRUE,,,,,,,,,STR,0.1,TRUE,96,,,,[成長]
+warrior,戰士的自我修養 Lv.31,csk111,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,10,60,ATK,self,5,60,STR,0.2,TRUE,9,,,,[成長] | [buff]
 mage,魔法彈,csk200,1,0,0,#FFFFFF,magic,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
-mage,風刃,csk201,1,5,1,#0080FF,magic,front,1,120,0,TRUE,,,,,,,,,,,TRUE,69,,,,風之女神幫我吹起大家的裙擺
-mage,魔法之道,csk202,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,5,60,,,,,INT,0.1,TRUE,39,,,,
-mage,火球術,csk203,5,15,3,#0080FF,magic,aoe,5,125,1,TRUE,,,,,,,,,,,TRUE,68,,,,超過30歲的單身男人自動習得
-mage,寒冰之槍,csk204,8,16,2,#0080FF,magic,front,8,140,0,TRUE,,,,,,,,,,,TRUE,99,,,,
-mage,法師的自我修養 Lv.11,csk205,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,MDAM,self,5,60,MATK,self,1,60,INT,0.1,TRUE,10,,,,
-mage,冰牢,csk206,13,26,3,#0080FF,magic,front,13,160,0,TRUE,ASPD,front,-40,20,,,,,,,TRUE,98,,,,冰緩前方敵人
-mage,魔法護盾,csk207,15,50,60,#FFFF00,buff,none,0,0,1,TRUE,MR,self,5,20,AC,self,5,20,WIS,0.1,TRUE,38,,,,
-mage,落雷,csk208,18,36,4,#0080FF,magic,random,18,180,0,TRUE,,,,,,,,,INT,0.2,TRUE,97,,,,
-mage,奧術空想,csk209,23,69,5,#0080FF,magic,aoe,23,125,1,TRUE,ASPD,enemy_aoe,-40,20,,,,,,,TRUE,67,,,,冰緩所有敵人
+mage,風刃,csk201,1,5,1,#0080FF,magic,front,1,130,1,TRUE,,,,,,,,,,,TRUE,69,,,,
+mage,魔法之道,csk202,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,5,60,,,,,INT,0.1,TRUE,39,,,,[成長] | [buff]
+mage,火球術,csk203,5,15,3,#0080FF,magic,aoe,5,125,2,TRUE,,,,,,,,,,,TRUE,68,,,,超過30歲轉職後習得
+mage,寒冰之槍,csk204,8,16,2,#0080FF,magic,front,8,160,1,TRUE,,,,,,,,,,,TRUE,99,,,,
+mage,法師的自我修養 Lv.11,csk205,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,MDAM,self,5,60,MATK,self,1,60,INT,0.1,TRUE,10,,,,[成長] | [buff]
+mage,冰牢,csk206,13,26,3,#0080FF,magic,front,13,190,2,TRUE,ASPD,front,-40,20,,,,,,,TRUE,98,,,,[debuff] 冰緩前方敵人
+mage,魔法護盾,csk207,15,50,60,#FFFF00,buff,none,0,0,1,TRUE,MR,self,5,20,AC,self,5,20,WIS,0.1,TRUE,38,,,,[成長]
+mage,落雷,csk208,18,36,4,#0080FF,magic,random,18,220,1,TRUE,,,,,,,,,INT,0.2,TRUE,97,,,,[成長]
+mage,奧術空想,csk209,23,69,5,#0080FF,magic,aoe,23,125,1,TRUE,ASPD,enemy_aoe,-40,20,,,,,,,TRUE,67,,,,[debuff] 冰緩所有敵人
 mage,連鎖閃電,csk210,27,81,5,#0080FF,magic,aoe,27,150,1,TRUE,,,,,,,,,,,TRUE,66,,,,
-mage,法師的自我修養 Lv.31,csk211,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,MDAM,self,10,60,MATK,self,5,60,INT,0.2,TRUE,9,,,,
+mage,法師的自我修養 Lv.31,csk211,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,MDAM,self,10,60,MATK,self,5,60,INT,0.2,TRUE,9,,,,[成長] | [buff]
 martial,攻擊,csk300,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
-martial,螺旋拳,csk301,1,5,1,#CC6600,physical,front,1,120,0,TRUE,,,,,,,,,CON,0.2,TRUE,99,,,,
-martial,武鬥之道,csk302,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,,,,,STR,0.1,TRUE,39,,,,
-martial,迴旋踢,csk303,5,15,2,#CC6600,physical,aoe,5,125,0,TRUE,,,,,,,,,CON,0.2,TRUE,69,,,,
-martial,升龍拳,csk304,8,16,2,#CC6600,physical,front,8,140,0,TRUE,,,,,,,,,CON,0.2,TRUE,98,,,,
-martial,武道的自我修養 Lv.11,csk305,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,ATK,self,1,60,CON,0.1,TRUE,10,,,,
-martial,百裂拳,csk306,13,26,3,#CC6600,physical,front,13,80,0,TRUE,ASPD,self,500,1,ADAM,self,-100,1,,,TRUE,97,,,,
-martial,鬥氣爆發,csk307,15,50,60,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,ATK,self,1,60,CON,0.1,TRUE,38,,,,
+martial,螺旋拳,csk301,1,5,1,#CC6600,physical,front,1,120,0,TRUE,,,,,,,,,,,TRUE,99,,,,
+martial,武鬥之道,csk302,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,,,,,STR,0.1,TRUE,39,,,,[成長] | [buff]
+martial,迴旋踢,csk303,5,15,2,#CC6600,physical,aoe,5,125,0,TRUE,,,,,,,,,CON,0.2,TRUE,69,,,,[成長]
+martial,升龍拳,csk304,8,16,2,#CC6600,physical,front,8,140,0,TRUE,,,,,,,,,,,TRUE,98,,,,
+martial,武道的自我修養 Lv.11,csk305,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,ATK,self,1,60,CON,0.1,TRUE,10,,,,[成長] | [buff]
+martial,百裂拳,csk306,13,26,3,#CC6600,physical,front,13,80,0,TRUE,ASPD,self,500,1,ADAM,self,-100,1,,,TRUE,97,,,,[犧牲] 快速攻擊
+martial,鬥氣爆發,csk307,15,50,60,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,5,60,ATK,self,1,60,CON,0.1,TRUE,38,,,,[成長] | [buff]
 martial,逆透勁,csk308,18,36,4,#CC6600,physical,front,18,160,0,TRUE,HPR,random,-500,1,,,,,,,TRUE,96,,,,隔山亂打牛
-martial,輕盈步伐,csk309,23,50,60,#FFFF00,buff,none,0,0,1,TRUE,AAR,self,5,60,SAR,self,5,60,DEX,0.1,TRUE,37,,,,
+martial,輕盈步伐,csk309,23,50,60,#FFFF00,buff,none,0,0,1,TRUE,AAR,self,5,60,SAR,self,5,60,DEX,0.1,TRUE,37,,,,[成長]
 martial,龍捲旋風腿,csk310,27,60,2,#CC6600,physical,aoe,27,150,0,TRUE,,,,,,,,,,,TRUE,68,,,,
-martial,武道的自我修養 Lv.31,csk311,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,10,60,ATK,self,5,60,CON,0.2,TRUE,9,,,,
+martial,武道的自我修養 Lv.31,csk311,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,ADAM,self,10,60,ATK,self,5,60,CON,0.2,TRUE,9,,,,[成長] | [buff]
 priest,魔法彈,csk400,1,0,0,#FFFFFF,magic,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
-priest,初級治癒術,csk401,1,25,0,#00FF00,heal,ally_hpless,10,50,1,FALSE,,ally_hpless,,,,,,,,,TRUE,90,ally_hp_below,50,,
-priest,群體恢復術,csk402,3,100,30,#00FF00,buff,none,0,0,3,TRUE,HPR,ally_aoe,10,30,,,,,WIS,0.1,TRUE,70,ally_hp_below,70,2,
-priest,中級治癒術,csk403,5,50,2,#00FF00,heal,ally_hpless,30,75,1,TRUE,,ally_hpless,,,,,,,,,TRUE,89,ally_hp_below,50,,
-priest,渴望之劍,csk404,8,150,60,#00FF00,buff,none,0,0,1,TRUE,ADAM,ally_aoe,5,60,,,,,STR,0.1,TRUE,20,,,,
-priest,魔法之劍,csk405,8,150,60,#00FF00,buff,none,0,0,1,TRUE,MDAM,ally_aoe,5,60,,,,,INT,0.1,TRUE,20,,,,
-priest,初級防禦術,csk406,8,150,60,#00FF00,buff,none,0,0,1,TRUE,AC,ally_aoe,5,60,,,,,CON,0.1,TRUE,40,,,,
-priest,魔法屏障,csk407,8,150,60,#00FF00,buff,none,0,0,1,TRUE,MR,ally_aoe,5,60,,,,,WIS,0.1,TRUE,40,,,,
-priest,生命逆行,csk408,11,22,1,#0080FF,magic,front,11,120,0,TRUE,HPR,front,-50,10,,,,,WIS,0.5,TRUE,99,,,,
-priest,聖光追蹤彈,csk409,15,30,2,#0080FF,magic,front,15,140,0,TRUE,ASPD,self,300,1,MDAM,self,-80,1,,,TRUE,98,,,,
-priest,高級治癒術,csk410,18,75,3,#00FF00,heal,ally_hpless,50,100,1,TRUE,,ally_hpless,,,,,,,,,TRUE,88,ally_hp_below,50,,
+priest,初級治癒術,csk401,1,20,0,#00FF00,heal,ally_hpless,20,75,1,FALSE,,ally_hpless,,,,,,,,,TRUE,90,ally_hp_below,50,,[heal]
+priest,群體恢復術,csk402,3,100,30,#00FF00,buff,none,0,0,3,TRUE,HPR,ally_aoe,10,30,,,,,WIS,0.1,TRUE,70,ally_hp_below,70,2,[成長] | [heal]
+priest,中級治癒術,csk403,5,40,2,#00FF00,heal,ally_hpless,40,100,1,TRUE,,ally_hpless,,,,,,,,,TRUE,89,ally_hp_below,50,,[heal]
+priest,渴望之劍,csk404,8,150,60,#00FF00,buff,none,0,0,1,TRUE,ADAM,ally_aoe,5,60,,,,,STR,0.1,TRUE,20,,,,[成長] | [buff]
+priest,魔法之劍,csk405,8,150,60,#00FF00,buff,none,0,0,1,TRUE,MDAM,ally_aoe,5,60,,,,,INT,0.1,TRUE,20,,,,[成長] | [buff]
+priest,初級防禦術,csk406,8,150,60,#00FF00,buff,none,0,0,1,TRUE,AC,ally_aoe,5,60,,,,,CON,0.1,TRUE,40,,,,[成長] | [buff]
+priest,魔法屏障,csk407,8,150,60,#00FF00,buff,none,0,0,1,TRUE,MR,ally_aoe,5,60,,,,,WIS,0.1,TRUE,40,,,,[成長] | [buff]
+priest,生命逆行,csk408,11,22,1,#0080FF,magic,front,11,120,0,TRUE,HPR,front,-50,10,,,,,WIS,0.5,TRUE,99,,,,[成長] | [buff]
+priest,聖光追蹤彈,csk409,15,30,2,#0080FF,magic,front,15,140,0,TRUE,ASPD,self,300,1,MDAM,self,-80,1,,,TRUE,98,,,,[犧牲] 聖靈召喚(假)
+priest,高級治癒術,csk410,18,60,3,#00FF00,heal,ally_hpless,60,125,1,TRUE,,ally_hpless,,,,,,,,,TRUE,88,ally_hp_below,50,,[heal]
 priest,聖十字懲戒,csk411,25,50,3,#0080FF,magic,front,25,160,0,TRUE,,,,,,,,,,,TRUE,97,,,,
 thief,攻擊,csk500,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
 thief,刺擊,csk501,1,5,1,#CC6600,physical,front,1,200,0,TRUE,,,,,,,,,,,TRUE,90,,,,
-thief,暗影之道,csk502,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,CRI,self,5,60,,,,0,DEX,0.5,TRUE,39,,,,
+thief,暗影之道,csk502,3,30,60,#FFFF00,buff,none,0,0,1,TRUE,CRI,self,5,60,,,,0,DEX,0.5,TRUE,39,,,,[成長] | [buff]
 thief,逆刃,csk503,5,10,2,#CC6600,physical,front,5,225,0,TRUE,,,,,,,,,,,TRUE,89,,,,
-thief,毒刃,csk504,8,16,3,#CC6600,physical,front,8,250,0,TRUE,HPR,front,-50,20,,,,0,DEX,0.2,TRUE,88,,,,
-thief,盜賊的自我修養 Lv.11,csk505,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,CRI,self,5,60,CRI_DMG,self,30,60,DEX,0.1,TRUE,10,,,,
-thief,瞬影連刺,csk506,13,26,4,#CC6600,physical,front,0,100,0,TRUE,ASPD,self,200,1,ADAM,self,-80,1,,,TRUE,87,,,,犧牲傷害以速度快速連刺
-thief,二刀連擊,csk507,15,30,60,#FFFF00,buff,none,0,0,0,TRUE,ASPD,self,100,60,,,,,,,TRUE,38,,,,比RO強一點
-thief,殘影亂斬,csk508,18,36,5,#CC6600,physical,front,18,200,0,TRUE,ASPD,self,400,1,ADAM,self,-80,1,,,TRUE,86,,,,以敵人看不清的速度攻擊
-thief,消失,csk509,23,50,60,#FFFF00,buff,none,0,0,1,TRUE,AAR,self,5,60,SAR,self,5,60,DEX,0.1,TRUE,37,,,,你看不見我
-thief,致命突刺,csk510,27,50,6,#CC6600,physical,front,27,200,0,TRUE,CRI,self,5,10,,,,,DEX,0.1,TRUE,85,,,,
-thief,盜賊的自我修養 Lv.31,csk511,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,CRI,self,5,60,CRI_DMG,self,60,60,,,TRUE,9,,,,
+thief,毒刃,csk504,8,16,3,#CC6600,physical,front,8,250,0,TRUE,HPR,front,-50,20,,,,0,DEX,0.2,TRUE,88,,,,[成長] | [debuff]
+thief,盜賊的自我修養 Lv.11,csk505,11,50,300,#FFFF00,buff,none,0,0,1,TRUE,CRI,self,5,60,CRI_DMG,self,30,60,DEX,0.1,TRUE,10,,,,[成長] | [buff]
+thief,瞬影連刺,csk506,13,26,4,#CC6600,physical,front,0,100,0,TRUE,ASPD,self,200,1,ADAM,self,-80,1,,,TRUE,87,,,,[犧牲] 快速連刺
+thief,二刀連擊,csk507,15,30,60,#FFFF00,buff,none,0,0,0,TRUE,ASPD,self,100,60,,,,,,,TRUE,38,,,,[buff]
+thief,殘影亂斬,csk508,18,36,5,#CC6600,physical,front,18,200,0,TRUE,ASPD,self,400,1,ADAM,self,-80,1,,,TRUE,86,,,,[犧牲] 快速連刺plus
+thief,消失,csk509,23,50,60,#FFFF00,buff,none,0,0,1,TRUE,AAR,self,5,60,SAR,self,5,60,DEX,0.1,TRUE,37,,,,[成長] | [buff]
+thief,致命突刺,csk510,27,50,6,#CC6600,physical,front,27,200,0,TRUE,CRI,self,5,10,,,,,DEX,0.1,TRUE,85,,,,[成長]
+thief,盜賊的自我修養 Lv.31,csk511,31,100,300,#FFFF00,buff,none,0,0,1,TRUE,CRI,self,5,60,CRI_DMG,self,60,60,,,TRUE,9,,,,[成長] | [buff]
