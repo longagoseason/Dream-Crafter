@@ -6,6 +6,8 @@ const INVENTORY_RESERVE_SLOTS = 10;
 const INVENTORY_SLOT_SIZE = 60;
 const INVENTORY_SLOT_GAP = 3;
 const INVENTORY_MAX_PAGE_BUTTONS = 10;
+const BIG_STORAGE_MAX_SLOTS = 200;
+const COLLECTION_PAGE_COUNT = 10;
 const SLOT_PATTERN_BASE = "./assets/slot-patterns/";
 const DEFAULT_MID_FIG_COLOR = "#A0A0A0";
 const DEFAULT_MID_FIG_SIZE = 80;
@@ -28,6 +30,8 @@ const state = {
   equipmentCharacter: "A", equipmentEditSets: {}, infoCharacter: "A", attributeCharacter: "A", skillCharacter: "A", enhanceCharacter: "A", enhanceEquipmentSet: 1, enhanceEquipmentSlot: null,
   enhanceSelectedAttribute: null, enhanceSelectedType: "bless", enhanceStoneKeys: { bless: null, curse: null, chaos: null }, enhanceReturnStoneKey: null, enhanceOperation: null, shopMode: "buy", rightPage: "battle", battleLogChannel: "all", elapsed: 0, spawnElapsed: 0, paused: false, lastTime: 0, savePending: false, savePromise: null, saveTransition: false, currentSlot: null,
   savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(), welcomeView: "welcome", patchNoteSeries: null,
+  mapMenuOpenGroups: new Set(), warehouseMode: "big", bigStorage: [], bigStoragePage: 0, bigStoragePageCapacity: 30, bigStorageColumns: 5, bigStorageRows: 6,
+  collections: [], collectionPage: 0, collectionInventoryPage: 0, collectionInventoryCapacity: 30, collectionStoragePage: 0, collectionStorageCapacity: 30,
 };
 const equipmentTooltipModels = new WeakMap();
 const enhancementFlashKeyframes = new Set();
@@ -60,7 +64,7 @@ async function init() {
     buildParty();
     state.currentSlot = saved ? activeSlot : null;
     const saveLoaded = applyPlayerSave(saved);
-    if (!saveLoaded) grantInitialItems();
+    if (!saveLoaded) { initializeStorageState(); grantInitialItems(); }
     setupEquipmentTooltip();
     setupEquipmentPanel();
     setupCharacterInfoPanel();
@@ -71,6 +75,8 @@ async function init() {
     setupWelcomePanel();
     setupRightPanel();
     setupShop();
+    setupWarehouse();
+    setupStatusPanel();
     setupEnhancePanel();
     buildMapSelect();
     const firstBattleMap = state.data.map.find((map) => map.map_id !== "town001" && map.max_monsters > 0);
@@ -110,6 +116,12 @@ function exportPlayerSave() {
       ? { key: entry.key, itemUuid: entry.itemUuid, itemId: entry.itemId, inventoryIndex: entry.inventoryIndex, locked: Boolean(entry.locked), enhancement: entry.enhancement, quantity: 1, isEquipment: true }
       : { key: entry.key || entry.itemId, itemId: entry.itemId, inventoryIndex: entry.inventoryIndex, quantity: entry.quantity, locked: Boolean(entry.locked), isEquipment: false }),
     autoSellItemIds: [...state.autoSellItemIds],
+    bigStorage: state.bigStorage.map((entry) => serializePortableEntry(entry, "storageIndex")),
+    collections: state.collections.map((collection) => ({
+      collectionId: collection.collectionId,
+      name: collection.name,
+      equipment: Object.fromEntries(Object.entries(collection.equipment ?? {}).map(([slot, equipped]) => [slot, serializeEquipmentInstance(equipped)])),
+    })),
     currentMapId: state.map?.map_id ?? null,
     paused: Boolean(state.paused),
     townAutoReturn: state.map?.map_id === "town001" && state.townAutoReturn,
@@ -176,6 +188,8 @@ function applyPlayerSave(saved) {
       ? { ...normalizeEquipmentInstance(entry), inventoryIndex: Number(entry.inventoryIndex), name: item.item_name, quantity: 1, isEquipment: true }
       : { key: entry.key || entry.itemId, itemId: entry.itemId, inventoryIndex: Number(entry.inventoryIndex), name: item.item_name, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), locked: Boolean(entry.locked), isEquipment: false });
   normalizeInventoryIndices();
+  state.bigStorage = normalizePortableEntries(saved.bigStorage ?? saved.warehouse ?? [], BIG_STORAGE_MAX_SLOTS, "storageIndex");
+  state.collections = normalizeCollections(saved.collections ?? saved.collectionStorage ?? []);
   state.autoSellItemIds = new Set((saved.autoSellItemIds ?? []).filter((itemId) => catalogItem(itemId)));
   ensureUniqueEquipmentUuids();
   state.savedMapId = saved.currentMapId ?? null;
@@ -216,11 +230,11 @@ function forceSafeTown() {
 }
 
 function resetRuntimeFromSave(saved) {
-  state.enemies = []; state.inventory = []; state.gold = 0; state.drops = []; state.autoSellItemIds = new Set();
+  state.enemies = []; state.inventory = []; state.bigStorage = []; state.collections = []; state.gold = 0; state.drops = []; state.autoSellItemIds = new Set();
   state.elapsed = 0; state.spawnElapsed = 0; state.savedMapId = null; state.previousMapId = null; state.townAutoReturn = false;
   buildParty();
   const loaded = applyPlayerSave(saved);
-  if (!loaded) grantInitialItems();
+  if (!loaded) { initializeStorageState(); grantInitialItems(); }
   forceSafeTown();
   state.paused = true;
   updatePauseButton();
@@ -438,6 +452,47 @@ function normalizeEquipmentInstance(source = {}) {
   return { key: itemUuid, itemUuid, itemId: source.itemId ?? source.item_id, locked: Boolean(source.locked), enhancement: normalizeEnhancement(source) };
 }
 
+function serializeEquipmentInstance(instance) {
+  const normalized = normalizeEquipmentInstance(instance);
+  return { key: normalized.key, itemUuid: normalized.itemUuid, itemId: normalized.itemId, locked: Boolean(normalized.locked), enhancement: normalized.enhancement, quantity: 1, isEquipment: true };
+}
+
+function serializePortableEntry(entry, indexKey = "inventoryIndex") {
+  return entry.isEquipment
+    ? { ...serializeEquipmentInstance(entry), [indexKey]: entry[indexKey] }
+    : { key: entry.key || entry.itemId, itemId: entry.itemId, [indexKey]: entry[indexKey], quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), locked: Boolean(entry.locked), isEquipment: false };
+}
+
+function normalizePortableEntries(entries, maximum, indexKey) {
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => ({ entry, item: catalogItem(entry?.itemId ?? entry?.item_id) }))
+    .filter(({ item }) => Boolean(item))
+    .slice(0, maximum)
+    .map(({ entry, item }, order) => state.data.equipment.some((candidate) => candidate.item_id === (entry.itemId ?? entry.item_id))
+      ? { ...normalizeEquipmentInstance(entry), [indexKey]: order, name: item.item_name, quantity: 1, isEquipment: true }
+      : { key: entry.key || entry.itemId || entry.item_id, itemId: entry.itemId ?? entry.item_id, [indexKey]: order, name: item.item_name, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), locked: Boolean(entry.locked), isEquipment: false });
+}
+
+function normalizeCollectionName(value, collectionId) {
+  const text = [...String(value ?? "").trim()].slice(0, 20).join("");
+  return text || `收藏庫 ${collectionId}`;
+}
+
+function normalizeCollections(source = []) {
+  const rows = Array.isArray(source) ? source : [];
+  return Array.from({ length: COLLECTION_PAGE_COUNT }, (_, index) => {
+    const collectionId = index + 1;
+    const saved = rows.find((row) => Number(row?.collectionId) === collectionId) ?? rows[index] ?? {};
+    return { collectionId, name: normalizeCollectionName(saved.name, collectionId), equipment: normalizeEquipmentMap(saved.equipment ?? {}) };
+  });
+}
+
+function initializeStorageState() {
+  state.bigStorage = [];
+  state.collections = normalizeCollections([]);
+  state.bigStoragePage = state.collectionInventoryPage = state.collectionStoragePage = 0;
+}
+
 function equipmentSetNumber(value) {
   return Number(value) === 2 ? 2 : 1;
 }
@@ -508,6 +563,8 @@ function ensureUniqueEquipmentUuids() {
   const equipmentInstances = [
     ...state.roster.flatMap((hero) => Object.values(hero.equipmentSets ?? {}).flatMap((equipmentSet) => Object.values(equipmentSet ?? {}))),
     ...state.inventory.filter((entry) => entry.isEquipment),
+    ...state.bigStorage.filter((entry) => entry.isEquipment),
+    ...state.collections.flatMap((collection) => Object.values(collection.equipment ?? {})),
   ];
   for (const instance of equipmentInstances) {
     let itemUuid = instance.itemUuid || instance.key || crypto.randomUUID();
@@ -994,6 +1051,7 @@ function recalculateInventoryLayout() {
   buildInventoryGrid();
   renderInventoryPagination();
   renderInventory();
+  if (state.rightPage === "warehouse") recalculateBigStorageLayout();
 }
 
 function buildParty() {
@@ -2421,7 +2479,7 @@ function createSkillRow(skill, learned, enabled, hero = null) {
     });
     mpLabel.append(mpInput); mpControls.append(mpLabel); mainline.append(mpControls);
   }
-  if (hero && skill.damage_target === "aoe") {
+  if (hero && ["aoe", "enemy_aoe", "ALLaoe"].includes(skill.damage_target)) {
     const setting = ensureSkillSetting(hero, skill);
     const controls = document.createElement("span"); controls.className = "skill-trigger-controls skill-monster-count-controls";
     const separator = document.createElement("span"); separator.className = "skill-separator"; separator.textContent = "|";
@@ -2488,7 +2546,9 @@ function setupRightPanel() {
       document.querySelectorAll("[data-right-page]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
       $("#right-battle-page").hidden = state.rightPage !== "battle";
       $("#right-shop-page").hidden = state.rightPage !== "shop";
+      $("#right-warehouse-page").hidden = state.rightPage !== "warehouse";
       if (state.rightPage === "shop") renderShop();
+      if (state.rightPage === "warehouse") requestAnimationFrame(() => { recalculateBigStorageLayout(); renderWarehouse(); });
     });
   }
   for (const button of document.querySelectorAll("[data-log-channel]")) {
@@ -2498,6 +2558,311 @@ function setupRightPanel() {
       document.querySelectorAll("[data-log-panel]").forEach((panel) => { panel.hidden = panel.dataset.logPanel !== state.battleLogChannel; });
     });
   }
+}
+
+function setupWarehouse() {
+  for (const button of document.querySelectorAll("[data-warehouse-mode]")) {
+    button.addEventListener("click", () => {
+      state.warehouseMode = button.dataset.warehouseMode;
+      document.querySelectorAll("[data-warehouse-mode]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+      renderWarehouse();
+    });
+  }
+  setupTransferQuantityDialog();
+  setupCollectionDialog();
+  const recalculate = () => { if (state.rightPage === "warehouse") recalculateBigStorageLayout(); if ($("#collection-dialog")?.open) recalculateCollectionLayouts(); };
+  if (typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver(recalculate);
+    observer.observe($("#right-warehouse-page"));
+    observer.observe($("#collection-dialog"));
+  } else window.addEventListener("resize", recalculate);
+  renderWarehouse();
+}
+
+function portableEntryAt(entries, indexKey, index) { return entries.find((entry) => entry[indexKey] === index) ?? null; }
+
+function compactBigStorage() {
+  state.bigStorage = state.bigStorage.slice(0, BIG_STORAGE_MAX_SLOTS).map((entry, storageIndex) => { entry.storageIndex = storageIndex; return entry; });
+  state.bigStoragePage = clamp(state.bigStoragePage, 0, Math.max(0, Math.ceil(BIG_STORAGE_MAX_SLOTS / Math.max(1, state.bigStoragePageCapacity)) - 1));
+  return state.bigStorage;
+}
+
+function firstFreeBigStorageIndex() { return state.bigStorage.length < BIG_STORAGE_MAX_SLOTS ? state.bigStorage.length : -1; }
+
+function floatingGridMetrics(grid, headerHeight = 0) {
+  const styles = getComputedStyle(grid);
+  const width = Math.max(INVENTORY_SLOT_SIZE, grid.clientWidth - parseFloat(styles.paddingLeft || 0) - parseFloat(styles.paddingRight || 0));
+  const height = Math.max(INVENTORY_SLOT_SIZE, grid.clientHeight - parseFloat(styles.paddingTop || 0) - parseFloat(styles.paddingBottom || 0) - headerHeight);
+  const columns = Math.max(1, Math.floor((width + INVENTORY_SLOT_GAP) / (INVENTORY_SLOT_SIZE + INVENTORY_SLOT_GAP)));
+  const rows = Math.max(1, Math.floor((height + INVENTORY_SLOT_GAP) / (INVENTORY_SLOT_SIZE + INVENTORY_SLOT_GAP)));
+  return { columns, rows, capacity: Math.max(1, columns * rows) };
+}
+
+function applyGridMetrics(grid, metrics) {
+  grid.style.setProperty("--inventory-columns", metrics.columns);
+  grid.style.setProperty("--inventory-rows", metrics.rows);
+}
+
+function rebuildPortableGrid(grid, capacity, clickHandler) {
+  if (!grid || grid.children.length === capacity) return;
+  grid.replaceChildren(...Array.from({ length: capacity }, (_, visibleIndex) => {
+    const button = document.createElement("button"); button.type = "button"; button.disabled = true;
+    button.addEventListener("click", () => clickHandler(visibleIndex));
+    return button;
+  }));
+}
+
+function renderPortableEntryCell(cell, entry, emptyLabel = "空白格") {
+  const item = entry ? catalogItem(entry.itemId) : null;
+  cell.textContent = entry ? inventoryButtonText(entry) : "";
+  applyEnhancementVisual(cell, entry?.isEquipment ? entry : null, item);
+  if (entry?.isEquipment) assignEquipmentTooltip(cell, item, "點擊移動", entry);
+  else { assignEquipmentTooltip(cell, null, "", null); cell.title = entry ? `${itemTooltip(item)}\n數量 ${entry.quantity}` : ""; }
+  cell.disabled = !entry;
+  cell.setAttribute("aria-label", entry ? `移動 ${entry.name}` : emptyLabel);
+}
+
+function renderGenericPagination(container, totalSlots, capacity, currentPage, onSelect) {
+  if (!container) return;
+  const count = Math.max(1, Math.ceil(totalSlots / Math.max(1, capacity)));
+  const page = clamp(currentPage, 0, count - 1);
+  const start = Math.floor(page / INVENTORY_MAX_PAGE_BUTTONS) * INVENTORY_MAX_PAGE_BUTTONS;
+  const end = Math.min(count, start + INVENTORY_MAX_PAGE_BUTTONS);
+  const make = (text, target, disabled = false, active = false) => {
+    const button = document.createElement("button"); button.type = "button"; button.textContent = text; button.disabled = disabled; button.classList.toggle("active", active);
+    button.addEventListener("click", () => onSelect(target)); return button;
+  };
+  const buttons = [make("‹", Math.max(0, start - 1), start === 0)];
+  for (let index = start; index < end; index++) buttons.push(make(String(index + 1), index, false, index === page));
+  buttons.push(make("›", Math.min(count - 1, end), end >= count));
+  container.replaceChildren(...buttons);
+}
+
+function recalculateBigStorageLayout() {
+  const grid = $("#big-storage-grid");
+  if (!grid || grid.clientWidth <= 0) return;
+  const oldCapacity = Math.max(1, state.bigStoragePageCapacity); const anchor = state.bigStoragePage * oldCapacity;
+  const metrics = {
+    columns: Math.max(1, state.inventoryColumns),
+    rows: Math.max(1, state.inventoryRows),
+    capacity: Math.max(1, state.inventoryPageCapacity),
+  };
+  state.bigStorageColumns = metrics.columns; state.bigStorageRows = metrics.rows; state.bigStoragePageCapacity = metrics.capacity;
+  state.bigStoragePage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.ceil(BIG_STORAGE_MAX_SLOTS / metrics.capacity) - 1);
+  applyGridMetrics(grid, metrics);
+  rebuildPortableGrid(grid, metrics.capacity, useBigStorageCell);
+  renderBigStorageGrid();
+}
+
+function renderBigStorageGrid() {
+  const grid = $("#big-storage-grid"); if (!grid) return;
+  const start = state.bigStoragePage * state.bigStoragePageCapacity;
+  [...grid.children].forEach((cell, visibleIndex) => renderPortableEntryCell(cell, portableEntryAt(state.bigStorage, "storageIndex", start + visibleIndex), "空白倉庫格"));
+  renderGenericPagination($("#big-storage-pages"), BIG_STORAGE_MAX_SLOTS, state.bigStoragePageCapacity, state.bigStoragePage, (page) => { state.bigStoragePage = page; renderBigStorageGrid(); });
+  $("#big-storage-count").textContent = `${state.bigStorage.length} / ${BIG_STORAGE_MAX_SLOTS}`;
+}
+
+function renderWarehouse() {
+  const big = state.warehouseMode === "big";
+  $("#big-storage-panel").hidden = !big;
+  $("#collection-launch-panel").hidden = big;
+  if (big) renderBigStorageGrid();
+}
+
+let transferQuantityResolver = null;
+function setupTransferQuantityDialog() {
+  const dialog = $("#transfer-quantity-dialog");
+  const finish = (value) => { const resolve = transferQuantityResolver; transferQuantityResolver = null; if (dialog.open) dialog.close(); resolve?.(value); };
+  $("#transfer-quantity-form").addEventListener("submit", (event) => { event.preventDefault(); const input = $("#transfer-quantity-input"); finish(clamp(Math.trunc(Number(input.value) || 0), 1, Number(input.max))); });
+  $("#transfer-quantity-all").addEventListener("click", () => finish(Number($("#transfer-quantity-input").max)));
+  $("#transfer-quantity-cancel").addEventListener("click", () => finish(null));
+  $("#transfer-quantity-close").addEventListener("click", () => finish(null));
+  dialog.addEventListener("cancel", (event) => { event.preventDefault(); finish(null); });
+}
+
+function requestTransferQuantity(action, itemName, maximum) {
+  if (maximum <= 1) return Promise.resolve(1);
+  const dialog = $("#transfer-quantity-dialog");
+  $("#transfer-quantity-title").textContent = `${action} ${itemName}`;
+  $("#transfer-quantity-owned").textContent = `目前可操作：${maximum}`;
+  const input = $("#transfer-quantity-input"); input.max = String(maximum); input.value = String(maximum);
+  if (dialog.open) dialog.close();
+  dialog.showModal();
+  return new Promise((resolve) => { transferQuantityResolver = resolve; });
+}
+
+function addPortableEntry(entries, indexKey, maximum, source, quantity) {
+  const isEquipment = Boolean(source.isEquipment || state.data.equipment.some((item) => item.item_id === source.itemId));
+  if (!isEquipment) {
+    const stack = entries.find((entry) => !entry.isEquipment && entry.itemId === source.itemId);
+    if (stack) { stack.quantity += quantity; return true; }
+  }
+  if (entries.length >= maximum) return false;
+  const item = catalogItem(source.itemId);
+  entries.push(isEquipment
+    ? { ...normalizeEquipmentInstance(source), [indexKey]: entries.length, name: item.item_name, quantity: 1, isEquipment: true }
+    : { key: source.key || source.itemId, itemId: source.itemId, [indexKey]: entries.length, name: item.item_name, quantity, locked: Boolean(source.locked), isEquipment: false });
+  return true;
+}
+
+async function transferInventoryToBigStorage(inventoryIndex) {
+  const arrayIndex = state.inventory.findIndex((entry) => entry.inventoryIndex === inventoryIndex); const entry = state.inventory[arrayIndex];
+  if (!entry) return false;
+  const quantity = entry.isEquipment ? 1 : await requestTransferQuantity("存放", entry.name, entry.quantity);
+  if (!quantity) return false;
+  if (!addPortableEntry(state.bigStorage, "storageIndex", BIG_STORAGE_MAX_SLOTS, entry, quantity)) { addLog("大倉庫已滿，無法存放物品。", { channel: "other" }); return false; }
+  if (!entry.isEquipment && entry.quantity > quantity) entry.quantity -= quantity; else state.inventory.splice(arrayIndex, 1);
+  compactInventory(); compactBigStorage(); render(); renderWarehouse(); if ($("#collection-dialog")?.open) renderCollectionDialog(); persistPlayerSave(); return true;
+}
+
+async function transferBigStorageToInventory(storageIndex) {
+  const arrayIndex = state.bigStorage.findIndex((entry) => entry.storageIndex === storageIndex); const entry = state.bigStorage[arrayIndex];
+  if (!entry) return false;
+  const quantity = entry.isEquipment ? 1 : await requestTransferQuantity("提領", entry.name, entry.quantity);
+  if (!quantity) return false;
+  const existingStack = !entry.isEquipment && state.inventory.find((candidate) => !candidate.isEquipment && candidate.itemId === entry.itemId);
+  if (!existingStack && firstFreeInventoryIndex() < 0) { addLog("背包已滿，無法提領物品。", { channel: "other" }); return false; }
+  if (existingStack) existingStack.quantity += quantity;
+  else if (entry.isEquipment) {
+    const inventoryIndex = firstFreeInventoryIndex();
+    state.inventory.push({ ...normalizeEquipmentInstance(entry), inventoryIndex, name: entry.name, quantity: 1, isEquipment: true });
+  } else addInventoryItem(entry.itemId, entry.name, quantity);
+  if (!entry.isEquipment && entry.quantity > quantity) entry.quantity -= quantity; else state.bigStorage.splice(arrayIndex, 1);
+  compactBigStorage(); render(); renderWarehouse(); if ($("#collection-dialog")?.open) renderCollectionDialog(); persistPlayerSave(); return true;
+}
+
+function useBigStorageCell(visibleIndex) { return transferBigStorageToInventory(state.bigStoragePage * state.bigStoragePageCapacity + visibleIndex); }
+
+const COLLECTION_GRID_LAYOUT = ["necklace_1", "earrings_1", "helmet_1", "earrings_2", null, null, "weapon_1", "body_1", "shield_1", null, "ring_1", "ring_2", "kneepads_1", "ring_3", "ring_4", "idol_1", "gloves_1", "shoe_1", "gloves_2", "core_1"];
+
+function currentCollection() { return state.collections[state.collectionPage] ?? state.collections[0]; }
+
+function setupCollectionDialog() {
+  $("#collection-open").addEventListener("click", openCollectionDialog);
+  $("#collection-close").addEventListener("click", () => $("#collection-dialog").close());
+  $("#collection-rename").addEventListener("click", openCollectionRenameDialog);
+  $("#collection-rename-close").addEventListener("click", closeCollectionRenameDialog);
+  $("#collection-rename-cancel").addEventListener("click", closeCollectionRenameDialog);
+  $("#collection-rename-form").addEventListener("submit", (event) => {
+    event.preventDefault(); const collection = currentCollection();
+    collection.name = normalizeCollectionName($("#collection-rename-input").value, collection.collectionId);
+    closeCollectionRenameDialog(); renderCollectionDialog(); persistPlayerSave();
+  });
+  const equipmentGrid = $("#collection-equipment-grid");
+  equipmentGrid.replaceChildren(...COLLECTION_GRID_LAYOUT.map((slot) => {
+    if (!slot) { const blank = document.createElement("span"); blank.className = "equipment-blank"; return blank; }
+    const button = document.createElement("button"); button.type = "button"; button.dataset.collectionSlot = slot;
+    button.addEventListener("click", () => removeCollectionEquipment(slot)); return button;
+  }));
+  const pages = $("#collection-pages");
+  pages.replaceChildren(...Array.from({ length: COLLECTION_PAGE_COUNT }, (_, index) => {
+    const button = document.createElement("button"); button.type = "button"; button.textContent = String(index + 1);
+    button.addEventListener("click", () => { state.collectionPage = index; renderCollectionDialog(); }); return button;
+  }));
+}
+
+function openCollectionDialog() {
+  const dialog = $("#collection-dialog"); if (!dialog.open) dialog.showModal();
+  requestAnimationFrame(() => { recalculateCollectionLayouts(); renderCollectionDialog(); });
+}
+
+function openCollectionRenameDialog() {
+  const collection = currentCollection();
+  $("#collection-rename-title").textContent = `重新命名收藏庫 ${collection.collectionId}`;
+  $("#collection-rename-input").value = collection.name;
+  $("#collection-rename-dialog").showModal(); $("#collection-rename-input").focus();
+}
+
+function closeCollectionRenameDialog() { if ($("#collection-rename-dialog").open) $("#collection-rename-dialog").close(); }
+
+function collectionSlotForItem(item, equipment) {
+  const compatible = EQUIPMENT_SLOTS.filter((slot) => slot.positions.includes(item?.EQ_position) || (item?.weapon_type === "martial_weapon" && slot.key === "shield_1"));
+  return compatible.find((slot) => !equipment[slot.key])?.key ?? compatible[0]?.key ?? null;
+}
+
+function showCollectionMessage(text, error = false) {
+  const message = $("#collection-message"); message.textContent = text; message.classList.toggle("error", error);
+}
+
+function moveEquipmentToCollection(sourceType, sourceIndex) {
+  const sourceEntries = sourceType === "inventory" ? state.inventory : state.bigStorage;
+  const indexKey = sourceType === "inventory" ? "inventoryIndex" : "storageIndex";
+  const arrayIndex = sourceEntries.findIndex((entry) => entry[indexKey] === sourceIndex);
+  const incoming = sourceEntries[arrayIndex];
+  if (!incoming) return false;
+  if (!incoming.isEquipment) { showCollectionMessage("收藏庫只能存放裝備。", true); return false; }
+  const collection = currentCollection(); const item = catalogItem(incoming.itemId); const slot = collectionSlotForItem(item, collection.equipment);
+  if (!slot) { showCollectionMessage(`${item.item_name} 沒有對應的收藏裝備欄位。`, true); return false; }
+  const replaced = collection.equipment[slot];
+  sourceEntries.splice(arrayIndex, 1);
+  if (replaced) {
+    const returnedItem = catalogItem(replaced.itemId);
+    sourceEntries.push({ ...normalizeEquipmentInstance(replaced), [indexKey]: sourceEntries.length, name: returnedItem.item_name, quantity: 1, isEquipment: true });
+  }
+  collection.equipment[slot] = normalizeEquipmentInstance(incoming);
+  if (sourceType === "inventory") compactInventory(); else compactBigStorage();
+  ensureUniqueEquipmentUuids(); render(); renderWarehouse(); renderCollectionDialog(); persistPlayerSave();
+  showCollectionMessage(`${item.item_name} 已放入 ${collection.name}${replaced ? "，原裝備已回到來源" : ""}。`);
+  return true;
+}
+
+function removeCollectionEquipment(slot) {
+  const collection = currentCollection(); const equipped = collection.equipment[slot]; if (!equipped) return false;
+  const item = catalogItem(equipped.itemId);
+  if (firstFreeBigStorageIndex() >= 0) addPortableEntry(state.bigStorage, "storageIndex", BIG_STORAGE_MAX_SLOTS, equipped, 1);
+  else {
+    const inventoryIndex = firstFreeInventoryIndex();
+    if (inventoryIndex < 0) { showCollectionMessage("倉庫與背包空間不足，無法卸下此裝備。", true); return false; }
+    state.inventory.push({ ...normalizeEquipmentInstance(equipped), inventoryIndex, name: item.item_name, quantity: 1, isEquipment: true });
+  }
+  delete collection.equipment[slot];
+  compactBigStorage(); compactInventory(); ensureUniqueEquipmentUuids(); render(); renderWarehouse(); renderCollectionDialog(); persistPlayerSave();
+  showCollectionMessage(`${item.item_name} 已從 ${collection.name} 卸下。`); return true;
+}
+
+function recalculateCollectionLayouts() {
+  const inventoryGrid = $("#collection-inventory-grid"); const storageGrid = $("#collection-storage-grid");
+  if (inventoryGrid?.clientWidth > 0 && inventoryGrid.clientHeight > 0) {
+    const old = Math.max(1, state.collectionInventoryCapacity); const anchor = state.collectionInventoryPage * old; const metrics = floatingGridMetrics(inventoryGrid);
+    state.collectionInventoryCapacity = metrics.capacity; state.collectionInventoryPage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.max(0, inventoryPageCountFor(metrics.capacity) - 1));
+    applyGridMetrics(inventoryGrid, metrics); rebuildPortableGrid(inventoryGrid, metrics.capacity, (visible) => moveEquipmentToCollection("inventory", state.collectionInventoryPage * state.collectionInventoryCapacity + visible));
+  }
+  if (storageGrid?.clientWidth > 0 && storageGrid.clientHeight > 0) {
+    const old = Math.max(1, state.collectionStorageCapacity); const anchor = state.collectionStoragePage * old; const metrics = floatingGridMetrics(storageGrid);
+    state.collectionStorageCapacity = metrics.capacity; state.collectionStoragePage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.ceil(BIG_STORAGE_MAX_SLOTS / metrics.capacity) - 1);
+    applyGridMetrics(storageGrid, metrics); rebuildPortableGrid(storageGrid, metrics.capacity, (visible) => moveEquipmentToCollection("storage", state.collectionStoragePage * state.collectionStorageCapacity + visible));
+  }
+  renderCollectionDialog();
+}
+
+function inventoryPageCountFor(capacity) {
+  const highest = state.inventory.reduce((maximum, entry) => Math.max(maximum, Number(entry.inventoryIndex) || 0), -1);
+  return Math.max(1, Math.ceil(Math.min(INVENTORY_MAX_SLOTS, Math.max(capacity, highest + 1 + INVENTORY_RESERVE_SLOTS)) / capacity));
+}
+
+function renderCollectionEquipment() {
+  const collection = currentCollection();
+  document.querySelectorAll("#collection-equipment-grid [data-collection-slot]").forEach((button) => {
+    const slot = button.dataset.collectionSlot; const equipped = collection.equipment[slot]; const item = equipped ? catalogItem(equipped.itemId) : null;
+    button.textContent = item ? equipmentButtonText(item, equipped) : equipmentSlotLabel(EQUIPMENT_SLOTS.find((candidate) => candidate.key === slot)?.positions[0]);
+    applyEnhancementVisual(button, equipped, item);
+    assignEquipmentTooltip(button, item, item ? "點擊卸下" : "", equipped);
+    button.disabled = !equipped;
+  });
+}
+
+function renderCollectionDialog() {
+  if (!state.collections.length) state.collections = normalizeCollections([]);
+  const collection = currentCollection();
+  $("#collection-name").textContent = collection.name;
+  document.querySelectorAll("#collection-pages button").forEach((button, index) => button.classList.toggle("active", index === state.collectionPage));
+  renderCollectionEquipment();
+  const inventoryStart = state.collectionInventoryPage * state.collectionInventoryCapacity;
+  [...$("#collection-inventory-grid").children].forEach((cell, visible) => renderPortableEntryCell(cell, inventoryEntryAt(inventoryStart + visible), "空白背包格"));
+  renderGenericPagination($("#collection-inventory-pages"), inventoryPageCountFor(state.collectionInventoryCapacity) * state.collectionInventoryCapacity, state.collectionInventoryCapacity, state.collectionInventoryPage, (page) => { state.collectionInventoryPage = page; renderCollectionDialog(); });
+  const storageStart = state.collectionStoragePage * state.collectionStorageCapacity;
+  [...$("#collection-storage-grid").children].forEach((cell, visible) => renderPortableEntryCell(cell, portableEntryAt(state.bigStorage, "storageIndex", storageStart + visible), "空白倉庫格"));
+  renderGenericPagination($("#collection-storage-pages"), BIG_STORAGE_MAX_SLOTS, state.collectionStorageCapacity, state.collectionStoragePage, (page) => { state.collectionStoragePage = page; renderCollectionDialog(); });
 }
 
 function setupShop() {
@@ -2886,20 +3251,83 @@ function renderShop() {
 
 function buildMapSelect() {
   const select = $("#map-select");
+  select.replaceChildren();
   for (const map of state.data.map) {
     const option = document.createElement("option"); option.value = map.map_id; option.textContent = map.map_id === "town001" ? map.name : `${map.name}（Lv.${map.unlock_level}）`;
     select.append(option);
   }
+  const currentLevel = Math.max(1, ...state.party.map((hero) => hero.level));
+  state.mapMenuOpenGroups = new Set([mapLevelGroup(currentLevel).start]);
+  $("#map-picker-button").addEventListener("click", () => {
+    const menu = $("#map-picker-menu");
+    menu.hidden = !menu.hidden;
+    $("#map-picker-button").setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  document.addEventListener("click", (event) => {
+    if (event.target.closest?.(".map-picker")) return;
+    $("#map-picker-menu").hidden = true;
+    $("#map-picker-button").setAttribute("aria-expanded", "false");
+  });
   updateMapLocks();
   select.addEventListener("change", () => chooseMap(select.value));
+}
+
+function mapLevelGroup(unlockLevel) {
+  const level = Math.max(1, Math.trunc(Number(unlockLevel) || 1));
+  const start = Math.floor((level - 1) / 10) * 10 + 1;
+  return { start, end: start + 9 };
+}
+
+function isTownMap(mapOrId) { return String(typeof mapOrId === "object" ? mapOrId?.map_id : mapOrId ?? "").startsWith("town"); }
+
+function renderMapMenu() {
+  const menu = $("#map-picker-menu");
+  if (!menu) return;
+  const highestLevel = Math.max(1, ...state.party.map((hero) => hero.level));
+  const towns = state.data.map.filter((map) => String(map.map_id).startsWith("town"));
+  const grouped = new Map();
+  state.data.map.forEach((map, order) => {
+    if (String(map.map_id).startsWith("town")) return;
+    const group = mapLevelGroup(map.unlock_level);
+    if (!grouped.has(group.start)) grouped.set(group.start, { ...group, maps: [] });
+    grouped.get(group.start).maps.push({ map, order });
+  });
+  const mapButton = (map) => {
+    const button = document.createElement("button");
+    button.type = "button"; button.dataset.mapId = map.map_id;
+    button.textContent = String(map.map_id).startsWith("town") ? map.name : `${map.name}（Lv.${map.unlock_level}）`;
+    button.disabled = !isTownMap(map) && map.unlock_level > highestLevel;
+    button.classList.toggle("active", state.map?.map_id === map.map_id);
+    button.addEventListener("click", () => { chooseMap(map.map_id); menu.hidden = true; $("#map-picker-button").setAttribute("aria-expanded", "false"); });
+    return button;
+  };
+  const fragments = towns.map(mapButton);
+  for (const group of [...grouped.values()].sort((a, b) => a.start - b.start)) {
+    const details = document.createElement("details"); details.dataset.groupStart = String(group.start); details.open = state.mapMenuOpenGroups.has(group.start);
+    const summary = document.createElement("summary"); summary.textContent = `等級 ${group.start} - ${group.end}區域`;
+    details.addEventListener("toggle", () => { if (details.open) state.mapMenuOpenGroups.add(group.start); else state.mapMenuOpenGroups.delete(group.start); });
+    details.append(summary, ...group.maps.sort((a, b) => a.map.unlock_level - b.map.unlock_level || a.order - b.order).map(({ map }) => mapButton(map)));
+    fragments.push(details);
+  }
+  menu.replaceChildren(...fragments);
+  syncMapPicker();
+}
+
+function syncMapPicker() {
+  const map = state.map;
+  if (!map) return;
+  if ($("#map-select")) $("#map-select").value = map.map_id;
+  if ($("#map-picker-button")) $("#map-picker-button").textContent = String(map.map_id).startsWith("town") ? map.name : `${map.name}（Lv.${map.unlock_level}）`;
+  document.querySelectorAll("#map-picker-menu [data-map-id]").forEach((button) => button.classList.toggle("active", button.dataset.mapId === map.map_id));
 }
 
 function updateMapLocks() {
   const highestLevel = Math.max(...state.party.map((hero) => hero.level));
   for (const option of $("#map-select").options) {
     const map = state.data.map.find((row) => row.map_id === option.value);
-    option.disabled = Boolean(map && map.map_id !== "town001" && map.unlock_level > highestLevel);
+    option.disabled = Boolean(map && !isTownMap(map) && map.unlock_level > highestLevel);
   }
+  renderMapMenu();
 }
 
 function mapMonsterNames(mapId) {
@@ -2920,6 +3348,7 @@ function chooseMap(mapId, townAutoReturn = false) {
   state.previousMapId = mapId;
   $("#map-select").disabled = false;
   $("#map-select").value = mapId;
+  syncMapPicker();
   state.enemies = []; state.spawnElapsed = state.map.spawn_cd;
   addLog(`進入 ${state.map.name}；這裡有：${mapMonsterNames(mapId).join("、")}`); spawnMonster(); render();
 }
@@ -3051,18 +3480,34 @@ function randomLivingTarget(targets) {
 
 function selectCombatTargets(targets, targetType) {
   const living = targets.filter((target) => target.hp > 0);
-  if (targetType === "aoe") return living;
+  if (["aoe", "enemy_aoe"].includes(targetType)) return living;
   if (targetType === "random") return randomLivingTarget(living);
   if (["front", "middle", "last"].includes(targetType)) {
     const index = { front: 0, middle: 1, last: 2 }[targetType];
     return living[index] ? [living[index]] : randomLivingTarget(living);
   }
-  if (targetType === "HPlower") return [...living].sort((a, b) => resourceRatio(a, "HP") - resourceRatio(b, "HP")).slice(0, 1);
-  if (targetType === "MPlower") return [...living]
-    .filter((target) => resourceRatio(target, "MP") !== null)
-    .sort((a, b) => resourceRatio(a, "MP") - resourceRatio(b, "MP"))
-    .slice(0, 1);
+  if (["HPlower", "HPhigher"].includes(targetType)) return selectResourceRatioTarget(living, "HP", targetType === "HPhigher");
+  if (["MPlower", "MPhigher"].includes(targetType)) return selectResourceRatioTarget(living, "MP", targetType === "MPhigher");
   return [];
+}
+
+function selectResourceRatioTarget(formation, resource, higher = false) {
+  const candidates = formation.map((target, order) => ({ target, order, ratio: resourceRatio(target, resource) })).filter((entry) => entry.ratio !== null);
+  candidates.sort((left, right) => (higher ? right.ratio - left.ratio : left.ratio - right.ratio) || left.order - right.order);
+  return candidates.length ? [candidates[0].target] : [];
+}
+
+function resolveSkillTargetSet(caster, targetType, allies, opponents, mainTargets = []) {
+  const livingAllies = allies.filter((target) => target.hp > 0);
+  const livingOpponents = opponents.filter((target) => target.hp > 0);
+  if (targetType === "DMGchoose") return [...mainTargets];
+  if (targetType === "self") return caster?.hp > 0 ? [caster] : [];
+  if (targetType === "ally_aoe") return livingAllies;
+  if (["aoe", "enemy_aoe"].includes(targetType)) return livingOpponents;
+  if (targetType === "ally_hpless") return selectResourceRatioTarget(livingAllies, "HP", false);
+  if (targetType === "ALLaoe") return [...livingAllies, ...livingOpponents];
+  if (targetType === "ALLrandom") return randomLivingTarget([...livingAllies, ...livingOpponents]);
+  return selectCombatTargets(livingOpponents, targetType);
 }
 
 function monsterOpponentFormation() {
@@ -3070,7 +3515,7 @@ function monsterOpponentFormation() {
 }
 
 function monsterSkillTargets(skill) {
-  return selectCombatTargets(monsterOpponentFormation(), skill.damage_target);
+  return resolveSkillTargetSet(null, skill.damage_target, state.enemies, monsterOpponentFormation());
 }
 
 function configuredSkillEffects(skill) {
@@ -3083,48 +3528,79 @@ function configuredSkillEffects(skill) {
   })).filter((effect) => effect.stat);
 }
 
-function addTimedSkillEffect(target, skill, effect, value, sourceName) {
+function parseConfiguredEffectValue(rawValue) {
+  const text = String(rawValue ?? "").trim();
+  const percentage = text.endsWith("%");
+  const numericText = percentage ? text.slice(0, -1).trim() : text;
+  const value = Number(numericText);
+  return { percentage, value: Number.isFinite(value) ? value : 0, raw: text };
+}
+
+function baseAttributeValue(target, stat) {
+  return Number(target?.[stat]) || 0;
+}
+
+function configuredEffectAmount(caster, skill, effect, target, context = {}) {
+  const parsed = parseConfiguredEffectValue(effect.value);
+  const referenceBonus = Number(context.effectReferenceBonus?.(effect, target) ?? 0) || 0;
+  if (!parsed.percentage) return roundSigned(parsed.value + referenceBonus);
+  if (effect.stat === "HP") return roundSigned((Math.max(0, Number(target.maxHp) || 0) * parsed.value / 100) + referenceBonus);
+  if (effect.stat === "MP") return roundSigned((Math.max(0, Number(target.maxMp) || 0) * parsed.value / 100) + referenceBonus);
+  const base = baseAttributeValue(target, effect.stat);
+  return roundSigned(base * (parsed.value / 100 - 1) + referenceBonus);
+}
+
+function statusCasterEntityKey(caster) {
+  if (!caster) return "unknown";
+  if (caster.monster_id) return `monster:${caster.id ?? caster.monster_id}`;
+  return `hero:${caster.classId ?? caster.id ?? caster.name}`;
+}
+
+function addTimedSkillEffect(target, caster, skill, effect, value) {
+  const seconds = Math.max(0, Number(effect.seconds) || 0);
+  if (!(seconds > 0) || !value) return false;
   target.buffs ??= [];
-  const effectKey = `${skill.skill_id}:${effect.index}`;
-  target.buffs = target.buffs.filter((buff) => buff.effectKey !== effectKey);
-  target.buffs.push({ effectKey, skillId: skill.skill_id, name: skill.name, stat: effect.stat, value, remaining: effect.seconds, sourceName, skillName: skill.name });
+  const casterEntityKey = statusCasterEntityKey(caster);
+  const effectKey = `${casterEntityKey}:${skill.skill_id}:${effect.index}`;
+  const existing = target.buffs.find((buff) => buff.effectKey === effectKey);
+  const next = {
+    effectKey, casterEntityKey, casterName: caster.name, sourceName: caster.name,
+    skillId: skill.skill_id, skillName: skill.name, name: skill.name,
+    effectIndex: effect.index, stat: effect.stat, value, effectAmount: value,
+    duration: seconds, remaining: seconds,
+  };
+  if (existing) Object.assign(existing, next);
+  else target.buffs.push(next);
+  return true;
 }
 
 function executeMonsterSkill(enemy, skill, skillColor) {
+  const allies = state.enemies.filter((target) => target.hp > 0);
+  const opponents = monsterOpponentFormation();
+  const mainTargets = resolveSkillTargetSet(enemy, skill.damage_target, allies, opponents);
   if (["physical", "magic"].includes(skill.damage_type)) {
-    for (const target of monsterSkillTargets(skill)) {
-      const avoidance = rollAttackAvoidance(enemy, target, skill.damage_type);
-      if (avoidance.dodged) { addLog(`${enemy.name} 的 ${skill.name} 被${avoidance.reason}。`, { channel: "monster", skillName: skill.name, skillColor }); continue; }
-      const result = calculateAttackDamage(enemy, target, skill.damage_type, skill.base_damage, skill.multiplier / 100);
-      target.hp = round(target.hp - result.damage);
-      addLog(`${enemy.name} 使用 ${skill.name}，對 ${target.name} 造成 ${result.damage} 傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
-        { channel: "monster", skillName: skill.name, skillColor, critical: result.critical.isCritical, damage: result.damage });
-      if (target.hp <= 0) handleHeroDeath(target, { kind: "direct", sourceName: enemy.name, skillName: skill.name, damage: result.damage, critical: result.critical.isCritical });
-    }
+    for (const target of mainTargets) executeSkillDamageComponent(enemy, target, skill, { channel: "monster", skillColor, baseDamage: skill.base_damage });
   }
   if (skill.damage_type === "heal") {
-    const targets = skill.effect_target === "ally_aoe" ? state.enemies.filter((target) => target.hp > 0) : [enemy];
-    for (const target of targets) {
+    for (const target of mainTargets.length ? mainTargets : [enemy]) {
       const result = calculateHeal(enemy, skill.base_damage, skill.multiplier / 100);
       const restored = round(Math.min(result.amount, target.maxHp - target.hp)); target.hp = round(target.hp + restored);
       addLog(`${enemy.name} 使用 ${skill.name}，恢復 ${target.name} ${restored} HP${result.critical.isCritical ? "（暴擊）" : ""}。`,
         { channel: "monster", skillName: skill.name, skillColor, critical: result.critical.isCritical, damage: restored });
     }
   }
-  if (configuredSkillEffects(skill).length) applyMonsterSkillEffects(enemy, skill, skillColor);
+  applyConfiguredSkillEffects(enemy, skill, { channel: "monster", skillColor, allies, opponents, mainTargets, baseDamage: skill.base_damage });
 }
 
 function monsterEffectTargets(enemy, targetType) {
-  if (targetType === "self") return [enemy];
-  if (targetType === "ally_aoe") return state.enemies.filter((target) => target.hp > 0);
-  if (targetType === "enemy_aoe") return livingParty();
-  return selectCombatTargets(monsterOpponentFormation(), targetType);
+  return resolveSkillTargetSet(enemy, targetType, state.enemies, monsterOpponentFormation());
 }
 
 function skillEffectTargetLabel(targetType, targets) {
   if (targetType === "self") return "自己";
   if (targetType === "ally_aoe") return "友方全體人員";
-  if (targetType === "enemy_aoe") return "敵方全體成員";
+  if (["aoe", "enemy_aoe"].includes(targetType)) return "敵方全體成員";
+  if (targetType === "ALLaoe") return "戰場全體成員";
   return targets.map((target) => target.name).join("、");
 }
 
@@ -3135,12 +3611,60 @@ function logAppliedSkillEffect(casterName, skill, effect, value, targets, skillC
     { channel, skillName: skill.name, skillColor });
 }
 
-function applyMonsterSkillEffects(enemy, skill, skillColor) {
+function executeSkillDamageComponent(caster, target, skill, context = {}) {
+  if (!target || target.hp <= 0 || !["physical", "magic"].includes(skill.damage_type)) return { hit: false };
+  const avoidance = rollAttackAvoidance(caster, target, skill.damage_type);
+  if (avoidance.dodged) {
+    addLog(`${caster.name} 的 ${skill.name} 被 ${target.name} ${avoidance.reason}。`, { channel: context.channel, skillName: skill.name, skillColor: context.skillColor });
+    return { hit: false, dodged: true, target };
+  }
+  const result = calculateAttackDamage(caster, target, skill.damage_type, context.baseDamage ?? skill.base_damage, skill.multiplier / 100);
+  target.hp = round(target.hp - result.damage);
+  addLog(`${caster.name} 使用 ${skill.name}，對 ${target.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
+    { channel: context.channel, skillName: skill.name, skillColor: context.skillColor, critical: result.critical.isCritical, damage: result.damage });
+  if (target.hp <= 0) resolveSkillCausedDeath(target, caster, skill, result, context.channel);
+  return { hit: true, target, ...result };
+}
+
+function resolveSkillCausedDeath(target, caster, skill, result = {}, channel = "other") {
+  if (state.roster.includes(target)) return handleHeroDeath(target, { kind: "direct", sourceName: caster.name, skillName: skill.name, damage: result.damage ?? 0, critical: result.critical?.isCritical });
+  if (state.enemies.includes(target)) { defeatMonster(target); return true; }
+  addLog(`${target.name} 被 ${caster.name} 的 ${skill.name} 擊倒。`, { channel, skillName: skill.name });
+  return true;
+}
+
+function applyDirectResourceEffect(caster, skill, effect, target, value, context) {
+  const resource = effect.stat;
+  const currentKey = resource.toLowerCase();
+  const maximumKey = resource === "HP" ? "maxHp" : "maxMp";
+  const maximum = Math.max(0, Number(target[maximumKey]) || 0);
+  const before = Math.max(0, Number(target[currentKey]) || 0);
+  target[currentKey] = clamp(roundSigned(before + value), 0, maximum);
+  const actual = roundSigned(target[currentKey] - before);
+  addLog(`${caster.name} 的 ${skill.name} 使 ${target.name} ${resource} ${actual >= 0 ? "+" : ""}${formatExactNumber(actual)}。`,
+    { channel: context.channel, skillName: skill.name, skillColor: context.skillColor });
+  if (resource === "HP" && before > 0 && target.hp <= 0) resolveSkillCausedDeath(target, caster, skill, { damage: Math.abs(actual), critical: { isCritical: false } }, context.channel);
+}
+
+function applyConfiguredSkillEffects(caster, skill, context) {
   for (const effect of configuredSkillEffects(skill)) {
-    const targets = monsterEffectTargets(enemy, effect.target);
-    const value = Number(effect.value) || 0;
-    for (const target of targets) addTimedSkillEffect(target, skill, effect, value, enemy.name);
-    logAppliedSkillEffect(enemy.name, skill, effect, value, targets, skillColor, "monster");
+    const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
+    if (effect.stat === "DMG") {
+      for (const target of targets) executeSkillDamageComponent(caster, target, skill, context);
+      continue;
+    }
+    if (["HP", "MP"].includes(effect.stat)) {
+      for (const target of targets.filter((candidate) => candidate.hp > 0)) {
+        const value = configuredEffectAmount(caster, skill, effect, target, context);
+        applyDirectResourceEffect(caster, skill, effect, target, value, context);
+      }
+      continue;
+    }
+    const livingTargets = targets.filter((candidate) => candidate.hp > 0);
+    for (const target of livingTargets) {
+      const value = configuredEffectAmount(caster, skill, effect, target, context);
+      if (addTimedSkillEffect(target, caster, skill, effect, value)) logAppliedSkillEffect(caster.name, skill, effect, value, [target], context.skillColor, context.channel);
+    }
   }
 }
 
@@ -3176,6 +3700,7 @@ function enterTown(automatic = true) {
   state.spawnElapsed = 0;
   const select = typeof document === "undefined" ? null : $("#map-select");
   if (select) { select.value = town.map_id; select.disabled = false; }
+  syncMapPicker();
   addLog(automatic
     ? `隊伍全滅，返回 ${town.name}。五名角色開始復活與恢復。`
     : `隊伍前往 ${town.name}。將留在村莊，直到玩家自行選擇其他地圖。`);
@@ -3207,6 +3732,7 @@ function returnFromTown() {
   state.spawnElapsed = destination.spawn_cd;
   const select = typeof document === "undefined" ? null : $("#map-select");
   if (select) { select.disabled = false; select.value = destination.map_id; }
+  syncMapPicker();
   addLog(`五名角色的 HP、MP 已全滿，自動返回 ${destination.name}。`);
   spawnMonster();
 }
@@ -3260,7 +3786,7 @@ function selectHeroSkill(actor) {
 
 function skillTriggerMet(actor, skill) {
   const setting = ensureSkillSetting(actor, skill);
-  if (skill.damage_target === "aoe" && state.enemies.filter((enemy) => enemy.hp > 0).length < setting.enemyCountThreshold) return false;
+  if (["aoe", "enemy_aoe", "ALLaoe"].includes(skill.damage_target) && state.enemies.filter((enemy) => enemy.hp > 0).length < setting.enemyCountThreshold) return false;
   if (skill.damage_type === "heal" || ["ally_hp_below", "ally_mp_below"].includes(skill.trigger_type)) {
     const resource = skill.trigger_type === "ally_mp_below" ? "MP" : "HP";
     const count = livingParty().filter((hero) => {
@@ -3289,9 +3815,8 @@ function executeHeroSkill(actor, skill) {
   else if (skill.damage_type === "buff") executeBuffSkill(actor, skill);
 }
 
-function skillTargets(skill) {
-  if (skill.damage_target === "ally_hpless") return [...livingParty()].sort((a, b) => resourceRatio(a, "HP") - resourceRatio(b, "HP")).slice(0, 1);
-  return selectCombatTargets(state.enemies, skill.damage_target);
+function skillTargets(actor, skill) {
+  return resolveSkillTargetSet(actor, skill.damage_target, livingParty(), state.enemies);
 }
 
 function skillReferenceValue(actor, attribute) {
@@ -3310,60 +3835,47 @@ function adjustedSkillBaseDamage(actor, skill) {
   return Number(skill.base_damage || 0) + skillReferenceBonus(actor, skill);
 }
 
-function adjustedSkillEffectValue(actor, skill, effect) {
-  return Number(effect.value || 0) + skillReferenceBonus(actor, skill);
-}
-
 function executeDamageSkill(actor, skill) {
-  const targets = skillTargets(skill);
-  for (const target of targets) {
-    const avoidance = rollAttackAvoidance(actor, target, skill.damage_type);
-    if (avoidance.dodged) { addLog(`${actor.name} 的 ${skill.name} 被${avoidance.reason}。`, { channel: "player", skillName: skill.name, skillColor: playerSkillLogColor(skill) }); continue; }
-    const result = calculateAttackDamage(actor, target, skill.damage_type, adjustedSkillBaseDamage(actor, skill), skill.multiplier / 100);
-    target.hp = round(target.hp - result.damage);
-    addLog(`${actor.name} 使用 ${skill.name}，對 ${target.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
-      { channel: "player", skillName: skill.name, skillColor: playerSkillLogColor(skill), critical: result.critical.isCritical, damage: result.damage });
-    if (target.hp <= 0) defeatMonster(target);
-  }
-  applyHeroSkillEffects(actor, skill);
+  const mainTargets = skillTargets(actor, skill);
+  const context = { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
+    baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) };
+  for (const target of mainTargets) executeSkillDamageComponent(actor, target, skill, context);
+  applyConfiguredSkillEffects(actor, skill, context);
 }
 
 function executeHealSkill(actor, skill) {
-  for (const target of skillTargets(skill)) {
+  const mainTargets = skillTargets(actor, skill);
+  for (const target of mainTargets) {
     const result = calculateHeal(actor, skill.base_damage, skill.multiplier / 100);
     const restored = round(Math.min(result.amount, target.maxHp - target.hp)); target.hp = round(target.hp + restored);
     addLog(`${actor.name} 使用 ${skill.name}，恢復 ${target.name} ${restored} HP${result.critical.isCritical ? "（暴擊）" : ""}。`,
       { channel: "player", skillName: skill.name, skillColor: playerSkillLogColor(skill), critical: result.critical.isCritical, damage: restored });
   }
-  applyHeroSkillEffects(actor, skill);
+  applyConfiguredSkillEffects(actor, skill, { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
+    baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) });
 }
 
 function executeBuffSkill(actor, skill) {
-  applyHeroSkillEffects(actor, skill);
+  const mainTargets = skillTargets(actor, skill);
+  applyConfiguredSkillEffects(actor, skill, { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
+    baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) });
 }
 
 function heroEffectTargets(actor, targetType) {
-  if (targetType === "self") return [actor];
-  if (targetType === "ally_aoe") return livingParty();
-  if (targetType === "enemy_aoe") return state.enemies.filter((target) => target.hp > 0);
-  if (targetType === "ally_hpless") return [...livingParty()].sort((a, b) => resourceRatio(a, "HP") - resourceRatio(b, "HP")).slice(0, 1);
-  return selectCombatTargets(state.enemies, targetType);
+  return resolveSkillTargetSet(actor, targetType, livingParty(), state.enemies);
 }
 
 function applyHeroSkillEffects(actor, skill) {
-  for (const effect of configuredSkillEffects(skill)) {
-    const targets = heroEffectTargets(actor, effect.target);
-    const value = adjustedSkillEffectValue(actor, skill, effect);
-    for (const target of targets) addTimedSkillEffect(target, skill, effect, value, actor.name);
-    logAppliedSkillEffect(actor.name, skill, effect, value, targets, playerSkillLogColor(skill), "player");
-  }
+  const mainTargets = skillTargets(actor, skill);
+  applyConfiguredSkillEffects(actor, skill, { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
+    baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) });
 }
 
 function playerAttack(actor, enemy) {
   const isMagic = actor.attackType === "magic";
   const damageType = isMagic ? "magic" : "physical";
   const avoidance = rollAttackAvoidance(actor, enemy, damageType);
-  if (avoidance.dodged) { addLog(`${actor.name} 的攻擊被${avoidance.reason}。`, { channel: "player" }); return; }
+  if (avoidance.dodged) { addLog(`${actor.name} 的攻擊被 ${enemy.name} ${avoidance.reason}。`, { channel: "player" }); return; }
   const result = calculateAttackDamage(actor, enemy, damageType, 0, 1);
   enemy.hp = round(enemy.hp - result.damage); addLog(`${actor.name} 對 ${enemy.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
     { channel: "player", critical: result.critical.isCritical, damage: result.damage });
@@ -3374,7 +3886,7 @@ function monsterAttack(enemy, target) {
   const magic = enemy.attack_type === "magic";
   const damageType = magic ? "magic" : "physical";
   const avoidance = rollAttackAvoidance(enemy, target, damageType);
-  if (avoidance.dodged) { addLog(`${enemy.name} 的攻擊被${avoidance.reason}。`, { channel: "monster" }); return; }
+  if (avoidance.dodged) { addLog(`${enemy.name} 的攻擊被 ${target.name} ${avoidance.reason}。`, { channel: "monster" }); return; }
   const basicSkill = state.data.skill.find((skill) => skill.skill_id === (magic ? "sk002" : "sk001"));
   const result = calculateAttackDamage(enemy, target, damageType, basicSkill?.base_damage ?? 0, basicSkill?.multiplier ? basicSkill.multiplier / 100 : 1);
   target.hp = round(target.hp - result.damage); addLog(`${enemy.name} 攻擊前排 ${target.name}，造成 ${result.damage} 傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
@@ -3429,6 +3941,7 @@ function handleHeroDeath(hero, context = {}) {
 
 function defeatMonster(enemy) {
   const index = state.enemies.findIndex((e) => e.id === enemy.id); if (index < 0) return;
+  enemy.buffs = []; enemy.casting = null;
   state.enemies.splice(index, 1);
   const gold = multipliedGoldReward(randomInt(enemy.gold_min, enemy.gold_max));
   state.gold += gold;
@@ -3555,8 +4068,9 @@ function addInventoryItem(itemId, name, quantity, options = {}) {
   return { autoSold: false, quantity: added, gold: 0, full: added < quantity };
 }
 
-function useInventoryCell(visibleIndex) {
+async function useInventoryCell(visibleIndex) {
   const inventoryIndex = state.inventoryPage * state.inventoryPageCapacity + visibleIndex;
+  if (state.rightPage === "warehouse" && state.warehouseMode === "big") { await transferInventoryToBigStorage(inventoryIndex); return; }
   const result = useInventoryItem(inventoryIndex);
   if (result.message) addLog(result.message);
   if (result.equipmentChanged) showEquipment(state.equipmentCharacter);
@@ -3764,7 +4278,79 @@ function render() {
   $("#gold").textContent = state.gold.toLocaleString(); $("#status").textContent = state.paused ? "已暫停" : inTown ? "村莊恢復中" : !livingParty().length ? "隊伍全滅" : "戰鬥中";
   $("#spawn-timer").textContent = inTown ? "全員休息中" : state.enemies.length >= state.map?.max_monsters ? "敵群已滿" : `增援 ${Math.max(0, (state.map?.spawn_cd ?? 0) - state.spawnElapsed).toFixed(1)}s`;
   $("#drop-log").innerHTML = state.drops.length ? state.drops.map((d) => `<li><strong>${d.text}</strong><br><small>${d.source}</small></li>`).join("") : '<li class="empty">尚無掉落</li>';
-  renderInventory(); renderShop();
+  renderInventory(); renderShop(); if (state.rightPage === "warehouse") renderWarehouse(); if ($("#collection-dialog")?.open) renderCollectionDialog();
+  if ($("#status-dialog")?.open) renderStatusDialog();
+}
+
+function statusEffectText(status) {
+  const amount = Number(status.effectAmount ?? status.value) || 0;
+  return `${status.casterName ?? status.sourceName ?? "未知來源"} | ${status.skillName ?? status.name ?? status.skillId ?? "未知技能"} | ${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)} (${Math.max(0, Math.ceil(Number(status.remaining) || 0))}s)`;
+}
+
+function statusGroups(unit) {
+  const active = (unit?.buffs ?? []).filter((status) => Number(status.remaining) > 0 && Number(status.effectAmount ?? status.value) !== 0);
+  return {
+    buff: active.filter((status) => Number(status.effectAmount ?? status.value) > 0),
+    debuff: active.filter((status) => Number(status.effectAmount ?? status.value) < 0),
+  };
+}
+
+function openStatusDialog() {
+  renderStatusDialog();
+  const dialog = $("#status-dialog");
+  if (!dialog.open) dialog.showModal();
+}
+
+function renderStatusSummary(card, unit) {
+  const groups = statusGroups(unit);
+  for (const kind of ["buff", "debuff"]) {
+    const container = card.querySelector(`[data-status-kind="${kind}"]`);
+    if (!container) continue;
+    const statuses = groups[kind];
+    const visible = statuses.length > 5 ? statuses.slice(0, 4) : statuses;
+    const chips = visible.map((status) => {
+      const chip = document.createElement("span");
+      chip.className = `status-chip ${kind}`;
+      chip.textContent = String(Math.max(0, Math.ceil(Number(status.remaining) || 0)));
+      chip.title = statusEffectText(status);
+      chip.setAttribute("aria-label", statusEffectText(status));
+      return chip;
+    });
+    if (statuses.length > 5) {
+      const overflow = document.createElement("span");
+      overflow.className = `status-chip ${kind} overflow`;
+      overflow.textContent = `+${statuses.length - 4}`;
+      overflow.title = `另有 ${statuses.length - 4} 個${kind === "buff" ? " Buff" : " Debuff"}`;
+      chips.push(overflow);
+    }
+    container.replaceChildren(...chips);
+  }
+}
+
+function renderStatusEntity(container, unit, fallbackName) {
+  const section = document.createElement("section"); section.className = "status-entity";
+  const heading = document.createElement("h4"); heading.textContent = unit?.name ?? fallbackName;
+  section.append(heading);
+  const statuses = [...statusGroups(unit).buff, ...statusGroups(unit).debuff];
+  if (!statuses.length) {
+    const empty = document.createElement("span"); empty.className = "status-empty"; empty.textContent = "無狀態"; section.append(empty);
+  } else for (const status of statuses) {
+    const row = document.createElement("p"); row.className = "status-detail"; row.textContent = statusEffectText(status); section.append(row);
+  }
+  container.append(section);
+}
+
+function renderStatusDialog() {
+  const party = $("#status-dialog-party"); const enemies = $("#status-dialog-enemies");
+  if (!party || !enemies) return;
+  party.replaceChildren(); enemies.replaceChildren();
+  for (let index = 0; index < 3; index++) renderStatusEntity(party, state.party[index], `玩家位置 ${index + 1}`);
+  for (let index = 0; index < 3; index++) renderStatusEntity(enemies, state.enemies[index], `敵方位置 ${index + 1}（空）`);
+}
+
+function setupStatusPanel() {
+  $("#status-dialog-open").addEventListener("click", openStatusDialog);
+  $("#status-dialog-close").addEventListener("click", () => $("#status-dialog").close());
 }
 
 function renderPartyUnits(container) {
@@ -3801,6 +4387,7 @@ function renderPartyUnits(container) {
     setBar(card, ".mp", unit.mp, unit.maxMp, "MP");
     if (unit.level >= 100) setMaxLevelBar(card);
     else setBar(card, ".exp", unit.exp, requiredExpFor(unit.level) ?? 1, "EXP", true);
+    renderStatusSummary(card, unit);
   }
   while (container.children.length > state.party.length) container.lastElementChild.remove();
 }
@@ -3836,7 +4423,7 @@ function renderUnits(container, units, enemies) {
   const desired = enemies ? 3 : units.length; container.replaceChildren();
   for (let i = 0; i < desired; i++) {
     const unit = units[i]; const card = $("#unit-template").content.firstElementChild.cloneNode(true);
-    if (!unit) { card.classList.add("dead"); card.querySelector(".slot").textContent = ["D", "E", "F"][i]; card.querySelector(".glyph").textContent = "—"; card.querySelector("strong").textContent = "等待生成"; card.querySelector(".unit-level").textContent = "空位"; setBar(card, ".hp", 0, 1, "HP"); card.querySelector(".mp").hidden = card.querySelector(".exp").hidden = true; container.append(card); continue; }
+    if (!unit) { card.classList.add("dead"); card.querySelector(".slot").textContent = ["D", "E", "F"][i]; card.querySelector(".glyph").textContent = "—"; card.querySelector("strong").textContent = "等待生成"; card.querySelector(".unit-level").textContent = "空位"; setBar(card, ".hp", 0, 1, "HP"); card.querySelector(".mp").hidden = card.querySelector(".exp").hidden = true; renderStatusSummary(card, null); container.append(card); continue; }
     const front = enemies ? i === 0 : unit === frontParty(); card.classList.toggle("front", front); card.classList.toggle("dead", unit.hp <= 0);
     card.querySelector(".slot").textContent = enemies ? ["D", "E", "F"][i] : unit.slot; card.querySelector(".glyph").textContent = enemies ? (unit.category === "boss" ? "♛" : "◆") : unit.slot;
     card.querySelector("strong").textContent = unit.name; card.querySelector(".unit-level").textContent = `Lv.${unit.level}`; setBar(card, ".hp", unit.hp, unit.maxHp, "HP", unit.maxHp >= 1000);
@@ -3846,6 +4433,7 @@ function renderUnits(container, units, enemies) {
       if (unit.level >= 100) setMaxLevelBar(card);
       else setBar(card, ".exp", unit.exp, requiredExpFor(unit.level) ?? 1, "EXP", true);
     }
+    renderStatusSummary(card, unit);
     container.append(card);
   }
 }

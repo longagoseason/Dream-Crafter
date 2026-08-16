@@ -88,7 +88,11 @@
         const header = headers[columnIndex];
         if (!header) continue;
         const raw = String(values[columnIndex] ?? "").trim();
-        if (enhancementMatrix && enhancementStats.has(header) && !rangeRow) {
+        if (["effect1_value", "effect2_value"].includes(header)) {
+          if (raw === "") record[header] = null;
+          else if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/.test(raw)) record[header] = raw;
+          else throw new CsvLoadError(`CSV validation failed: ${entry.file} row ${rowIndex + 1}, ${header} must be a number or percentage`, { path: entry.file, row: rowIndex + 1, column: header });
+        } else if (enhancementMatrix && enhancementStats.has(header) && !rangeRow) {
           if (/^(true|false)$/i.test(raw)) record[header] = raw.toLowerCase() === "true";
           else throw new CsvLoadError(`CSV validation failed: ${entry.file} row ${rowIndex + 1}, ${header} must be TRUE or FALSE`, { path: entry.file, row: rowIndex + 1, column: header });
         } else if (numberFields.has(header) || (enhancementMatrix && enhancementStats.has(header))) {

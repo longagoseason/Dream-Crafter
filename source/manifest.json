@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-15T00:55:55.725Z",
+  "generatedAt": "2026-08-16T17:03:27.224Z",
   "numberFields": [
     "AAR",
     "AC",
@@ -52,9 +52,7 @@
     "cost",
     "curse_affixes",
     "effect1_sec",
-    "effect1_value",
     "effect2_sec",
-    "effect2_value",
     "effect_multi",
     "effect_value_max",
     "effect_value_min",
