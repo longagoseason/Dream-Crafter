@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dreamer · 三人隊伍放置 RPG</title>
   <link rel="icon" type="image/png" href="./assets/images/Dreamer_logo.png">
-  <link rel="stylesheet" href="./style.css?v=20260817-status-compact">
+  <link rel="stylesheet" href="./style.css?v=20260817-status-recovery">
 </head>
 <body>
   <main class="game-layout">
@@ -129,10 +129,7 @@
   </template>
   <dialog id="status-dialog" class="attribute-dialog status-dialog">
     <div class="dialog-title"><strong>Buff / Debuff 狀態</strong><button id="status-dialog-close" type="button" aria-label="關閉">×</button></div>
-    <div class="status-dialog-layout">
-      <section><h3>玩家狀態</h3><div id="status-dialog-party" class="status-entity-list"></div></section>
-      <section><h3>敵方狀態</h3><div id="status-dialog-enemies" class="status-entity-list"></div></section>
-    </div>
+    <div id="status-dialog-grid" class="status-dialog-layout" aria-label="六名戰場成員狀態"></div>
   </dialog>
   <dialog id="character-info-dialog" class="attribute-dialog character-info-dialog">
     <div class="dialog-title"><strong>角色資訊</strong><button id="character-info-close" type="button" aria-label="關閉">×</button></div>
@@ -275,6 +272,6 @@
   <script src="./csvLoader.js?v=20260817-status-effects"></script>
   <script src="./runtimePlatform.js?v=20260811-csv-no-store"></script>
   <script src="./saveManager.js?v=20260812-save-slots"></script>
-  <script src="./game.js?v=20260817-status-compact"></script>
+  <script src="./game.js?v=20260817-status-recovery"></script>
 </body>
 </html>

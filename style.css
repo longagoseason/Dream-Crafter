@@ -71,14 +71,14 @@ button:not(:disabled) { cursor:pointer; } button:not(:disabled):hover { backgrou
 .status-chip.buff { border-color:#77aa77; background:#1d3821; }
 .status-chip.debuff { border-color:#bb6666; background:#421e1e; }
 .status-chip.overflow { border-color:#aaa; background:#303030; }
-.status-dialog { width:min(920px,calc(100vw - 32px)); max-width:none; }
-.status-dialog-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:12px; }
-.status-dialog-layout>section { min-width:0; border:1px solid var(--line); }
-.status-dialog-layout h3 { margin:0; padding:8px 10px; border-bottom:1px solid var(--line); font-size:13px; text-align:center; }
-.status-entity { padding:9px 10px; border-bottom:1px solid #444; }
-.status-entity:last-child { border-bottom:0; }
-.status-entity h4 { margin:0 0 6px; font-size:12px; }
-.status-detail { margin:3px 0; color:#ddd; font:10px/1.4 ui-monospace,monospace; overflow-wrap:anywhere; }
+.status-dialog-layout { width:100%; min-width:0; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:6px; padding:10px; overflow-x:auto; box-sizing:border-box; }
+.status-dialog-layout>.status-entity { min-width:0; padding:0; border:1px solid var(--line); overflow:hidden; }
+.status-dialog-layout .status-entity h4 { min-width:0; margin:0; padding:8px 6px; border-bottom:1px solid var(--line); font-size:12px; text-align:center; overflow-wrap:anywhere; word-break:break-word; }
+.status-effect-group { min-height:32px; padding:6px; }
+.status-effect-group+.status-effect-group { border-top:1px solid #444; }
+.status-detail { min-width:0; max-width:100%; margin:3px 0; color:#ddd; font:10px/1.4 ui-monospace,monospace; white-space:normal; overflow:hidden; overflow-wrap:anywhere; word-break:break-word; }
+.status-detail span { min-width:0; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
+.status-detail span+span::before { content:" | "; color:var(--ink); }
 .status-empty { color:#888; font-size:10px; }
 .battle-heading-actions { display:flex; align-items:center; gap:8px; min-width:0; }
 #status-dialog-open { width:auto; min-width:max-content; padding:4px 8px; white-space:nowrap; font:10px/1.2 "Noto Sans TC","Microsoft JhengHei",sans-serif; }
@@ -87,6 +87,7 @@ button:not(:disabled) { cursor:pointer; } button:not(:disabled):hover { backgrou
 .inventory-grid { flex:1; min-height:0; display:grid; grid-template-columns:repeat(var(--inventory-columns,6),var(--slot-size)); grid-template-rows:repeat(var(--inventory-rows,6),var(--slot-size)); align-content:start; justify-content:center; gap:3px; padding:5px; overflow:hidden; background:#202020; }.inventory-grid button { width:var(--slot-size); height:var(--slot-size); min-width:0; min-height:0; border:1px solid var(--line); padding:4px 2px; background:var(--color-mid-inventory-empty-background); color:var(--color-mid-inventory-empty-text); font-size:12px; line-height:1.2; text-align:center; overflow:hidden; overflow-wrap:anywhere; }.inventory-grid button:not(:empty){background:var(--color-mid-inventory-filled-background);color:var(--color-mid-inventory-filled-text)}.inventory-grid button:disabled{cursor:default;color:#777}
 .bottom-tabs { height:52px; border:2px solid var(--line); display:grid; grid-template-columns:repeat(4,1fr); background:#151515; }.bottom-tabs button { min-width:0; padding:5px 3px; border:0; color:#ddd; font-size:12px; }.bottom-tabs button+button{border-left:1px solid var(--line)}
 .attribute-dialog { width:min(520px,calc(100vw - 32px)); color:var(--ink); border:2px solid var(--line); background:#111; padding:0; box-shadow:0 12px 50px #000; }
+.attribute-dialog.status-dialog { width:min(95vw,1200px); max-width:1200px; }
 .attribute-dialog::backdrop { background:rgba(0,0,0,.78); }
 .dialog-title { height:48px; display:flex; align-items:center; justify-content:space-between; padding-left:16px; border-bottom:1px solid var(--line); }.dialog-title button{height:100%;width:48px;border:0;border-left:1px solid var(--line);font-size:24px}
 .attribute-characters { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid var(--line); }.attribute-characters button{min-width:0;border:0;border-right:1px solid var(--line)}.attribute-characters button:last-child{border-right:0}.attribute-characters button.active{background:#c7c7c7;color:#111;font-weight:700}

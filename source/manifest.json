@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-16T17:03:27.224Z",
+  "generatedAt": "2026-08-17T13:29:48.162Z",
   "numberFields": [
     "AAR",
     "AC",
@@ -142,7 +142,8 @@
         "recover_rate",
         "town_recover",
         "Death_EXP_Penalty",
-        "mid_fig_size"
+        "mid_fig_size",
+        "AAR_SAR_max"
       ],
       "id": []
     },
@@ -847,7 +848,9 @@
         "gold_min",
         "gold_max",
         "loot_id",
-        "loot_multiplier"
+        "loot_multiplier",
+        "loot2_id",
+        "loot2_multiplier"
       ],
       "id": [
         "monster_id"

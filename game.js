@@ -45,6 +45,22 @@ const roundStat = (n) => Math.round(n * 10) / 10;
 // rounding to one decimal here would erase small rates such as 0.1 HPR/MPR.
 const roundSigned = (n) => Math.round(n * 1000000) / 1000000;
 const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const runtimeWarningKeys = new Set();
+
+function aarSarMaximum() {
+  const configured = Number(systemSettings()?.AAR_SAR_max);
+  if (Number.isFinite(configured)) return clamp(configured, 0, 100);
+  const warningKey = "invalid:AAR_SAR_max";
+  if (!runtimeWarningKeys.has(warningKey)) {
+    runtimeWarningKeys.add(warningKey);
+    console.warn("[WARN] Dreamer_Syetem.csv AAR_SAR_max is invalid; fallback to 95%.");
+  }
+  return 95;
+}
+
+function rollConfiguredAttackAvoidance(attacker, target, damageType, random = Math.random) {
+  return rollAttackAvoidance(attacker, target, damageType, random, aarSarMaximum());
+}
 
 async function init() {
   try {
@@ -1857,7 +1873,7 @@ function enhancementStoneEntries(type = null) {
 function addEnhancementValues(target, values) {
   for (const [stat, value] of Object.entries(values)) {
     const total = Number(target[stat] ?? 0) + Number(value);
-    target[stat] = ["HPR", "MPR"].includes(stat) ? Math.round(total * 10) / 10 : total;
+    target[stat] = ["HPR", "MPR", "CRI"].includes(stat) ? Math.round(total * 10) / 10 : total;
   }
 }
 
@@ -1869,6 +1885,7 @@ function rollEnhancementValue(stat, min, max, multiplier, random) {
   const scaledMin = Math.round(Number(min) * Number(multiplier) * 100) / 100;
   const scaledMax = Math.round(Number(max) * Number(multiplier) * 100) / 100;
   const raw = scaledMin + (scaledMax - scaledMin) * random();
+  if (stat === "CRI") return Math.round(raw * 10) / 10;
   const scale = ["HPR", "MPR"].includes(stat) ? 10 : 1;
   return Math.ceil(raw * scale) / scale;
 }
@@ -1993,7 +2010,7 @@ function performEquipmentEnhancement(hero, equipmentSlot, selection = {}, random
 function subtractEnhancementValues(target, values) {
   for (const [stat, value] of Object.entries(values ?? {})) {
     const total = Number(target[stat] ?? 0) - Number(value);
-    const normalized = ["HPR", "MPR"].includes(stat) ? Math.round(total * 10) / 10 : total;
+    const normalized = ["HPR", "MPR", "CRI"].includes(stat) ? Math.round(total * 10) / 10 : total;
     if (Math.abs(normalized) < 1e-9) delete target[stat];
     else target[stat] = normalized;
   }
@@ -2570,6 +2587,10 @@ function setupWarehouse() {
   }
   setupTransferQuantityDialog();
   setupCollectionDialog();
+  setupPortableGridDelegation($("#big-storage-grid"), (visibleIndex) => useBigStorageCell(visibleIndex));
+  setupCollectionEquipmentDelegation($("#collection-equipment-grid"));
+  setupPortableGridDelegation($("#collection-inventory-grid"), (visibleIndex) => moveEquipmentToCollection("inventory", state.collectionInventoryPage * state.collectionInventoryCapacity + visibleIndex));
+  setupPortableGridDelegation($("#collection-storage-grid"), (visibleIndex) => moveEquipmentToCollection("storage", state.collectionStoragePage * state.collectionStorageCapacity + visibleIndex));
   const recalculate = () => { if (state.rightPage === "warehouse") recalculateBigStorageLayout(); if ($("#collection-dialog")?.open) recalculateCollectionLayouts(); };
   if (typeof ResizeObserver !== "undefined") {
     const observer = new ResizeObserver(recalculate);
@@ -2603,13 +2624,33 @@ function applyGridMetrics(grid, metrics) {
   grid.style.setProperty("--inventory-rows", metrics.rows);
 }
 
-function rebuildPortableGrid(grid, capacity, clickHandler) {
+function rebuildPortableGrid(grid, capacity) {
   if (!grid || grid.children.length === capacity) return;
   grid.replaceChildren(...Array.from({ length: capacity }, (_, visibleIndex) => {
     const button = document.createElement("button"); button.type = "button"; button.disabled = true;
-    button.addEventListener("click", () => clickHandler(visibleIndex));
+    button.dataset.visibleIndex = String(visibleIndex);
     return button;
   }));
+}
+
+function setupPortableGridDelegation(grid, handler) {
+  if (!grid || grid.dataset.delegatedClick === "true") return;
+  grid.dataset.delegatedClick = "true";
+  grid.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-visible-index]");
+    if (!button || button.disabled || !grid.contains(button)) return;
+    handler(Number(button.dataset.visibleIndex));
+  });
+}
+
+function setupCollectionEquipmentDelegation(grid) {
+  if (!grid || grid.dataset.delegatedClick === "true") return;
+  grid.dataset.delegatedClick = "true";
+  grid.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-collection-slot]");
+    if (!button || button.disabled || !grid.contains(button)) return;
+    removeCollectionEquipment(button.dataset.collectionSlot);
+  });
 }
 
 function renderPortableEntryCell(cell, entry, emptyLabel = "空白格") {
@@ -2628,14 +2669,30 @@ function renderGenericPagination(container, totalSlots, capacity, currentPage, o
   const page = clamp(currentPage, 0, count - 1);
   const start = Math.floor(page / INVENTORY_MAX_PAGE_BUTTONS) * INVENTORY_MAX_PAGE_BUTTONS;
   const end = Math.min(count, start + INVENTORY_MAX_PAGE_BUTTONS);
-  const make = (text, target, disabled = false, active = false) => {
-    const button = document.createElement("button"); button.type = "button"; button.textContent = text; button.disabled = disabled; button.classList.toggle("active", active);
-    button.addEventListener("click", () => onSelect(target)); return button;
-  };
-  const buttons = [make("‹", Math.max(0, start - 1), start === 0)];
-  for (let index = start; index < end; index++) buttons.push(make(String(index + 1), index, false, index === page));
-  buttons.push(make("›", Math.min(count - 1, end), end >= count));
-  container.replaceChildren(...buttons);
+  container._selectPage = onSelect;
+  if (container.dataset.delegatedClick !== "true") {
+    container.dataset.delegatedClick = "true";
+    container.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-page-target]");
+      if (!button || button.disabled || !container.contains(button)) return;
+      container._selectPage?.(Number(button.dataset.pageTarget));
+    });
+  }
+  const descriptors = [{ text: "‹", target: Math.max(0, start - 1), disabled: start === 0, active: false }];
+  for (let index = start; index < end; index++) descriptors.push({ text: String(index + 1), target: index, disabled: false, active: index === page });
+  descriptors.push({ text: "›", target: Math.min(count - 1, end), disabled: end >= count, active: false });
+  const structureKey = descriptors.map(({ text, target }) => `${text}:${target}`).join("|");
+  if (container.dataset.structureKey !== structureKey) {
+    container.dataset.structureKey = structureKey;
+    container.replaceChildren(...descriptors.map(() => { const button = document.createElement("button"); button.type = "button"; return button; }));
+  }
+  [...container.children].forEach((button, index) => {
+    const descriptor = descriptors[index];
+    button.textContent = descriptor.text;
+    button.dataset.pageTarget = String(descriptor.target);
+    button.disabled = descriptor.disabled;
+    button.classList.toggle("active", descriptor.active);
+  });
 }
 
 function recalculateBigStorageLayout() {
@@ -2650,7 +2707,7 @@ function recalculateBigStorageLayout() {
   state.bigStorageColumns = metrics.columns; state.bigStorageRows = metrics.rows; state.bigStoragePageCapacity = metrics.capacity;
   state.bigStoragePage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.ceil(BIG_STORAGE_MAX_SLOTS / metrics.capacity) - 1);
   applyGridMetrics(grid, metrics);
-  rebuildPortableGrid(grid, metrics.capacity, useBigStorageCell);
+  rebuildPortableGrid(grid, metrics.capacity);
   renderBigStorageGrid();
 }
 
@@ -2752,7 +2809,7 @@ function setupCollectionDialog() {
   equipmentGrid.replaceChildren(...COLLECTION_GRID_LAYOUT.map((slot) => {
     if (!slot) { const blank = document.createElement("span"); blank.className = "equipment-blank"; return blank; }
     const button = document.createElement("button"); button.type = "button"; button.dataset.collectionSlot = slot;
-    button.addEventListener("click", () => removeCollectionEquipment(slot)); return button;
+    return button;
   }));
   const pages = $("#collection-pages");
   pages.replaceChildren(...Array.from({ length: COLLECTION_PAGE_COUNT }, (_, index) => {
@@ -2825,12 +2882,12 @@ function recalculateCollectionLayouts() {
   if (inventoryGrid?.clientWidth > 0 && inventoryGrid.clientHeight > 0) {
     const old = Math.max(1, state.collectionInventoryCapacity); const anchor = state.collectionInventoryPage * old; const metrics = floatingGridMetrics(inventoryGrid);
     state.collectionInventoryCapacity = metrics.capacity; state.collectionInventoryPage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.max(0, inventoryPageCountFor(metrics.capacity) - 1));
-    applyGridMetrics(inventoryGrid, metrics); rebuildPortableGrid(inventoryGrid, metrics.capacity, (visible) => moveEquipmentToCollection("inventory", state.collectionInventoryPage * state.collectionInventoryCapacity + visible));
+    applyGridMetrics(inventoryGrid, metrics); rebuildPortableGrid(inventoryGrid, metrics.capacity);
   }
   if (storageGrid?.clientWidth > 0 && storageGrid.clientHeight > 0) {
     const old = Math.max(1, state.collectionStorageCapacity); const anchor = state.collectionStoragePage * old; const metrics = floatingGridMetrics(storageGrid);
     state.collectionStorageCapacity = metrics.capacity; state.collectionStoragePage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.ceil(BIG_STORAGE_MAX_SLOTS / metrics.capacity) - 1);
-    applyGridMetrics(storageGrid, metrics); rebuildPortableGrid(storageGrid, metrics.capacity, (visible) => moveEquipmentToCollection("storage", state.collectionStoragePage * state.collectionStorageCapacity + visible));
+    applyGridMetrics(storageGrid, metrics); rebuildPortableGrid(storageGrid, metrics.capacity);
   }
   renderCollectionDialog();
 }
@@ -3556,7 +3613,7 @@ function statusCasterEntityKey(caster) {
   return `hero:${caster.classId ?? caster.id ?? caster.name}`;
 }
 
-function addTimedSkillEffect(target, caster, skill, effect, value) {
+function addTimedSkillEffect(target, caster, skill, effect, value, skillColor = null) {
   const seconds = Math.max(0, Number(effect.seconds) || 0);
   if (!(seconds > 0) || !value) return false;
   target.buffs ??= [];
@@ -3566,6 +3623,7 @@ function addTimedSkillEffect(target, caster, skill, effect, value) {
   const next = {
     effectKey, casterEntityKey, casterName: caster.name, sourceName: caster.name,
     skillId: skill.skill_id, skillName: skill.name, name: skill.name,
+    skillColor: csvColor(skillColor || skill.skill_color, "#ededed"),
     effectIndex: effect.index, stat: effect.stat, value, effectAmount: value,
     duration: seconds, remaining: seconds,
   };
@@ -3574,22 +3632,54 @@ function addTimedSkillEffect(target, caster, skill, effect, value) {
   return true;
 }
 
+function applyRecoveryAmount(target, resource, calculatedRecovery) {
+  const currentKey = resource === "HP" ? "hp" : "mp";
+  const maximumKey = resource === "HP" ? "maxHp" : "maxMp";
+  const maximum = Math.max(0, Number(target?.[maximumKey]) || 0);
+  const before = clamp(Number(target?.[currentKey]) || 0, 0, maximum);
+  const calculated = Math.max(0, Number(calculatedRecovery) || 0);
+  const actual = roundSigned(Math.min(calculated, Math.max(0, maximum - before)));
+  const overflow = roundSigned(Math.max(0, calculated - actual));
+  target[currentKey] = roundSigned(before + actual);
+  return { resource, calculatedRecovery: roundSigned(calculated), actualRecovery: actual, overflowRecovery: overflow };
+}
+
+function recoveryResultText(result) {
+  const overflowLabel = result.resource === "HP" ? "過量治療" : "過量回復";
+  const overflow = result.overflowRecovery > 0 ? ` (${overflowLabel}+${formatExactNumber(result.overflowRecovery)})` : "";
+  return `${result.resource} +${formatExactNumber(result.actualRecovery)}${overflow}`;
+}
+
+function logSkillRecovery(caster, skill, target, result, context = {}, critical = false) {
+  const recoveryText = recoveryResultText(result);
+  addLog(`${caster.name} 的 ${skill.name} 使 ${target.name} ${recoveryText}${critical ? "（暴擊）" : ""}。`, {
+    channel: context.channel,
+    skillName: skill.name,
+    skillColor: context.skillColor,
+    critical,
+    recoveryText,
+  });
+}
+
 function executeMonsterSkill(enemy, skill, skillColor) {
   const allies = state.enemies.filter((target) => target.hp > 0);
   const opponents = monsterOpponentFormation();
   const mainTargets = resolveSkillTargetSet(enemy, skill.damage_target, allies, opponents);
+  let mainDamageTotal = 0;
   if (["physical", "magic"].includes(skill.damage_type)) {
-    for (const target of mainTargets) executeSkillDamageComponent(enemy, target, skill, { channel: "monster", skillColor, baseDamage: skill.base_damage });
+    for (const target of mainTargets) {
+      const result = executeSkillDamageComponent(enemy, target, skill, { channel: "monster", skillColor, baseDamage: skill.base_damage });
+      if (result.hit) mainDamageTotal += Number(result.damageDealt) || 0;
+    }
   }
   if (skill.damage_type === "heal") {
     for (const target of mainTargets.length ? mainTargets : [enemy]) {
       const result = calculateHeal(enemy, skill.base_damage, skill.multiplier / 100);
-      const restored = round(Math.min(result.amount, target.maxHp - target.hp)); target.hp = round(target.hp + restored);
-      addLog(`${enemy.name} 使用 ${skill.name}，恢復 ${target.name} ${restored} HP${result.critical.isCritical ? "（暴擊）" : ""}。`,
-        { channel: "monster", skillName: skill.name, skillColor, critical: result.critical.isCritical, damage: restored });
+      const recovery = applyRecoveryAmount(target, "HP", result.amount);
+      logSkillRecovery(enemy, skill, target, recovery, { channel: "monster", skillColor }, result.critical.isCritical);
     }
   }
-  applyConfiguredSkillEffects(enemy, skill, { channel: "monster", skillColor, allies, opponents, mainTargets, baseDamage: skill.base_damage });
+  applyConfiguredSkillEffects(enemy, skill, { channel: "monster", skillColor, allies, opponents, mainTargets, mainDamageTotal, baseDamage: skill.base_damage });
 }
 
 function monsterEffectTargets(enemy, targetType) {
@@ -3613,17 +3703,20 @@ function logAppliedSkillEffect(casterName, skill, effect, value, targets, skillC
 
 function executeSkillDamageComponent(caster, target, skill, context = {}) {
   if (!target || target.hp <= 0 || !["physical", "magic"].includes(skill.damage_type)) return { hit: false };
-  const avoidance = rollAttackAvoidance(caster, target, skill.damage_type);
+  const avoidance = rollConfiguredAttackAvoidance(caster, target, skill.damage_type);
   if (avoidance.dodged) {
     addLog(`${caster.name} 的 ${skill.name} 被 ${target.name} ${avoidance.reason}。`, { channel: context.channel, skillName: skill.name, skillColor: context.skillColor });
     return { hit: false, dodged: true, target };
   }
   const result = calculateAttackDamage(caster, target, skill.damage_type, context.baseDamage ?? skill.base_damage, skill.multiplier / 100);
+  const hpBefore = Math.max(0, Number(target.hp) || 0);
   target.hp = round(target.hp - result.damage);
+  // Leech is based on HP that was actually removed; overkill damage cannot be absorbed.
+  const damageDealt = roundSigned(Math.min(hpBefore, Math.max(0, Number(result.damage) || 0)));
   addLog(`${caster.name} 使用 ${skill.name}，對 ${target.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
     { channel: context.channel, skillName: skill.name, skillColor: context.skillColor, critical: result.critical.isCritical, damage: result.damage });
   if (target.hp <= 0) resolveSkillCausedDeath(target, caster, skill, result, context.channel);
-  return { hit: true, target, ...result };
+  return { hit: true, target, ...result, damageDealt };
 }
 
 function resolveSkillCausedDeath(target, caster, skill, result = {}, channel = "other") {
@@ -3639,20 +3732,36 @@ function applyDirectResourceEffect(caster, skill, effect, target, value, context
   const maximumKey = resource === "HP" ? "maxHp" : "maxMp";
   const maximum = Math.max(0, Number(target[maximumKey]) || 0);
   const before = Math.max(0, Number(target[currentKey]) || 0);
+  if (value >= 0) {
+    const recovery = applyRecoveryAmount(target, resource, value);
+    logSkillRecovery(caster, skill, target, recovery, context);
+    return recovery;
+  }
   target[currentKey] = clamp(roundSigned(before + value), 0, maximum);
   const actual = roundSigned(target[currentKey] - before);
   addLog(`${caster.name} 的 ${skill.name} 使 ${target.name} ${resource} ${actual >= 0 ? "+" : ""}${formatExactNumber(actual)}。`,
     { channel: context.channel, skillName: skill.name, skillColor: context.skillColor });
   if (resource === "HP" && before > 0 && target.hp <= 0) resolveSkillCausedDeath(target, caster, skill, { damage: Math.abs(actual), critical: { isCritical: false } }, context.channel);
+  return { resource, calculatedRecovery: value, actualRecovery: actual, overflowRecovery: 0 };
 }
 
 function applyConfiguredSkillEffects(caster, skill, context) {
   for (const effect of configuredSkillEffects(skill)) {
-    const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
     if (effect.stat === "DMG") {
+      const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
       for (const target of targets) executeSkillDamageComponent(caster, target, skill, context);
       continue;
     }
+    if (["HPleech", "MPleech"].includes(effect.stat)) {
+      const parsed = parseConfiguredEffectValue(effect.value);
+      const amount = parsed.percentage
+        ? Math.max(0, Number(context.mainDamageTotal) || 0) * Math.max(0, parsed.value) / 100
+        : Math.max(0, parsed.value);
+      const resource = effect.stat === "HPleech" ? "HP" : "MP";
+      applyDirectResourceEffect(caster, skill, { ...effect, stat: resource }, caster, roundSigned(amount), context);
+      continue;
+    }
+    const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
     if (["HP", "MP"].includes(effect.stat)) {
       for (const target of targets.filter((candidate) => candidate.hp > 0)) {
         const value = configuredEffectAmount(caster, skill, effect, target, context);
@@ -3663,7 +3772,7 @@ function applyConfiguredSkillEffects(caster, skill, context) {
     const livingTargets = targets.filter((candidate) => candidate.hp > 0);
     for (const target of livingTargets) {
       const value = configuredEffectAmount(caster, skill, effect, target, context);
-      if (addTimedSkillEffect(target, caster, skill, effect, value)) logAppliedSkillEffect(caster.name, skill, effect, value, [target], context.skillColor, context.channel);
+      if (addTimedSkillEffect(target, caster, skill, effect, value, context.skillColor)) logAppliedSkillEffect(caster.name, skill, effect, value, [target], context.skillColor, context.channel);
     }
   }
 }
@@ -3839,7 +3948,11 @@ function executeDamageSkill(actor, skill) {
   const mainTargets = skillTargets(actor, skill);
   const context = { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
     baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) };
-  for (const target of mainTargets) executeSkillDamageComponent(actor, target, skill, context);
+  context.mainDamageTotal = 0;
+  for (const target of mainTargets) {
+    const result = executeSkillDamageComponent(actor, target, skill, context);
+    if (result.hit) context.mainDamageTotal += Number(result.damageDealt) || 0;
+  }
   applyConfiguredSkillEffects(actor, skill, context);
 }
 
@@ -3847,9 +3960,9 @@ function executeHealSkill(actor, skill) {
   const mainTargets = skillTargets(actor, skill);
   for (const target of mainTargets) {
     const result = calculateHeal(actor, skill.base_damage, skill.multiplier / 100);
-    const restored = round(Math.min(result.amount, target.maxHp - target.hp)); target.hp = round(target.hp + restored);
-    addLog(`${actor.name} 使用 ${skill.name}，恢復 ${target.name} ${restored} HP${result.critical.isCritical ? "（暴擊）" : ""}。`,
-      { channel: "player", skillName: skill.name, skillColor: playerSkillLogColor(skill), critical: result.critical.isCritical, damage: restored });
+    const skillColor = playerSkillLogColor(skill);
+    const recovery = applyRecoveryAmount(target, "HP", result.amount);
+    logSkillRecovery(actor, skill, target, recovery, { channel: "player", skillColor }, result.critical.isCritical);
   }
   applyConfiguredSkillEffects(actor, skill, { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
     baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) });
@@ -3874,7 +3987,7 @@ function applyHeroSkillEffects(actor, skill) {
 function playerAttack(actor, enemy) {
   const isMagic = actor.attackType === "magic";
   const damageType = isMagic ? "magic" : "physical";
-  const avoidance = rollAttackAvoidance(actor, enemy, damageType);
+  const avoidance = rollConfiguredAttackAvoidance(actor, enemy, damageType);
   if (avoidance.dodged) { addLog(`${actor.name} 的攻擊被 ${enemy.name} ${avoidance.reason}。`, { channel: "player" }); return; }
   const result = calculateAttackDamage(actor, enemy, damageType, 0, 1);
   enemy.hp = round(enemy.hp - result.damage); addLog(`${actor.name} 對 ${enemy.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
@@ -3885,7 +3998,7 @@ function playerAttack(actor, enemy) {
 function monsterAttack(enemy, target) {
   const magic = enemy.attack_type === "magic";
   const damageType = magic ? "magic" : "physical";
-  const avoidance = rollAttackAvoidance(enemy, target, damageType);
+  const avoidance = rollConfiguredAttackAvoidance(enemy, target, damageType);
   if (avoidance.dodged) { addLog(`${enemy.name} 的攻擊被 ${target.name} ${avoidance.reason}。`, { channel: "monster" }); return; }
   const basicSkill = state.data.skill.find((skill) => skill.skill_id === (magic ? "sk002" : "sk001"));
   const result = calculateAttackDamage(enemy, target, damageType, basicSkill?.base_damage ?? 0, basicSkill?.multiplier ? basicSkill.multiplier / 100 : 1);
@@ -4012,12 +4125,24 @@ function rollDrops(enemy) {
   const avgLevel = state.party.reduce((s, p) => s + p.level, 0) / state.party.length;
   const totalLuck = state.party.reduce((sum, hero) => sum + Number(combatStat(hero, "LUK")), 0);
   const levelDiff = Math.round((avgLevel - enemy.level) * 10) / 10;
-  const lootMultiplier = Math.max(0, Number(enemy.loot_multiplier) || 0);
-  const commonDrops = state.data.lootDrops.filter((row) => row.loot_id === enemy.loot_id);
-  for (const drop of commonDrops) {
-    const rate = calculatedItemDropRate(drop.base_drop_rate * lootMultiplier, totalLuck, levelDiff);
-    if (Math.random() * 100 < rate) receiveDrop(drop, randomInt(drop.quantity_min, drop.quantity_max), enemy.name);
-  }
+  const rollLootTable = (lootId, rawMultiplier, label) => {
+    if (!lootId) return;
+    const multiplier = Number(rawMultiplier);
+    if (!Number.isFinite(multiplier) || multiplier < 0) {
+      const warningKey = `loot:${enemy.monster_id}:${label}`;
+      if (!runtimeWarningKeys.has(warningKey)) {
+        runtimeWarningKeys.add(warningKey);
+        console.warn(`[WARN] monster ${enemy.monster_id} has ${label}_id but invalid ${label}_multiplier.`);
+      }
+      return;
+    }
+    for (const drop of state.data.lootDrops.filter((row) => row.loot_id === lootId)) {
+      const rate = calculatedItemDropRate(drop.base_drop_rate * multiplier, totalLuck, levelDiff);
+      if (Math.random() * 100 < rate) receiveDrop(drop, randomInt(drop.quantity_min, drop.quantity_max), enemy.name);
+    }
+  };
+  rollLootTable(enemy.loot_id, enemy.loot_multiplier, "loot");
+  rollLootTable(enemy.loot2_id, enemy.loot2_multiplier, "loot2");
   const specialDrops = state.data.specialLoot.filter((row) => row.monster_id === enemy.monster_id);
   for (const drop of specialDrops) {
     const rate = calculatedItemDropRate(drop.base_drop_rate, totalLuck, levelDiff);
@@ -4219,6 +4344,7 @@ function coloredLogHtml(text, meta = {}) {
   addToken("閃避", gameColor("dodge"), "log-dodge", 8);
   addToken("暴擊", gameColor("critical_hit"), "log-critical", 9);
   if (meta.critical && meta.damage !== null && meta.damage !== undefined) addToken(formatExactNumber(meta.damage), gameColor("critical_hit"), "log-critical-damage", 7);
+  addToken(meta.recoveryText, indexedColor("right_heal_color", "#00FF00"), "log-recovery", 10);
   addToken(meta.deathPenaltyText, indexedColor("Death_Penalty_color"), "log-death-penalty", 10);
 
   const candidates = [];
@@ -4287,6 +4413,16 @@ function statusEffectText(status) {
   return `${status.casterName ?? status.sourceName ?? "未知來源"} | ${status.skillName ?? status.name ?? status.skillId ?? "未知技能"} | ${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)} (${Math.max(0, Math.ceil(Number(status.remaining) || 0))}s)`;
 }
 
+function statusSkillColor(status) {
+  if (/^#[0-9a-f]{6}$/i.test(String(status?.skillColor ?? ""))) return status.skillColor;
+  const skillId = status?.skillId;
+  if (!skillId) return "#ededed";
+  if (String(status?.casterEntityKey ?? "").startsWith("monster:")) {
+    return csvColor(state.data.monsterSkills.find((row) => row.skill_id === skillId)?.skill_color, "#ededed");
+  }
+  return csvColor(state.data.characterSkills.find((row) => row.skill_id === skillId)?.skill_color, "#ededed");
+}
+
 function statusGroups(unit) {
   const active = (unit?.buffs ?? []).filter((status) => Number(status.remaining) > 0 && Number(status.effectAmount ?? status.value) !== 0);
   return {
@@ -4327,25 +4463,40 @@ function renderStatusSummary(card, unit) {
   }
 }
 
+function renderStatusDetailRow(status) {
+  const amount = Number(status.effectAmount ?? status.value) || 0;
+  const row = document.createElement("p"); row.className = "status-detail";
+  const caster = document.createElement("span"); caster.textContent = status.casterName ?? status.sourceName ?? "未知來源";
+  const skill = document.createElement("span"); skill.textContent = status.skillName ?? status.name ?? status.skillId ?? "未知技能"; skill.style.color = statusSkillColor(status);
+  const effect = document.createElement("span"); effect.textContent = `${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)}`;
+  effect.style.color = indexedColor(amount >= 0 ? "buff_color" : "debuff_color", amount >= 0 ? "#00FFFF" : "#FF0000");
+  const seconds = document.createElement("span"); seconds.textContent = `(${Math.max(0, Math.ceil(Number(status.remaining) || 0))}s)`;
+  seconds.style.color = indexedColor("buff_sec_color", "#FFFF00");
+  row.append(caster, skill, effect, seconds);
+  return row;
+}
+
 function renderStatusEntity(container, unit, fallbackName) {
   const section = document.createElement("section"); section.className = "status-entity";
   const heading = document.createElement("h4"); heading.textContent = unit?.name ?? fallbackName;
   section.append(heading);
-  const statuses = [...statusGroups(unit).buff, ...statusGroups(unit).debuff];
-  if (!statuses.length) {
-    const empty = document.createElement("span"); empty.className = "status-empty"; empty.textContent = "無狀態"; section.append(empty);
-  } else for (const status of statuses) {
-    const row = document.createElement("p"); row.className = "status-detail"; row.textContent = statusEffectText(status); section.append(row);
+  const groups = statusGroups(unit);
+  for (const statuses of [groups.buff, groups.debuff]) {
+    const group = document.createElement("div"); group.className = "status-effect-group";
+    for (const status of statuses) group.append(renderStatusDetailRow(status));
+    section.append(group);
+  }
+  if (!groups.buff.length && !groups.debuff.length) {
+    const empty = document.createElement("span"); empty.className = "status-empty"; empty.textContent = "無狀態"; section.querySelector(".status-effect-group").append(empty);
   }
   container.append(section);
 }
 
 function renderStatusDialog() {
-  const party = $("#status-dialog-party"); const enemies = $("#status-dialog-enemies");
-  if (!party || !enemies) return;
-  party.replaceChildren(); enemies.replaceChildren();
-  for (let index = 0; index < 3; index++) renderStatusEntity(party, state.party[index], `玩家位置 ${index + 1}`);
-  for (let index = 0; index < 3; index++) renderStatusEntity(enemies, state.enemies[index], `敵方位置 ${index + 1}（空）`);
+  const grid = $("#status-dialog-grid"); if (!grid) return;
+  grid.replaceChildren();
+  for (let index = 0; index < 3; index++) renderStatusEntity(grid, state.party[index], `玩家位置 ${index + 1}`);
+  for (let index = 0; index < 3; index++) renderStatusEntity(grid, state.enemies[index], `敵方位置 ${index + 1}（空）`);
 }
 
 function setupStatusPanel() {

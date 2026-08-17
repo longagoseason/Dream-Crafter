@@ -35,9 +35,11 @@
     return { isCritical, multiplier: isCritical ? Math.max(0, combatStat(actor, "CRI_DMG") / 100) : 1 };
   }
 
-  function rollAttackAvoidance(attacker, target, damageType, random = Math.random) {
+  function rollAttackAvoidance(attacker, target, damageType, random = Math.random, maximumDodgeChance = 95) {
     const dodgeKey = damageType === "magic" ? "SAR" : "AAR";
-    const dodgeChance = clamp(combatStat(target, dodgeKey), 0, 95);
+    const configuredMaximum = Number(maximumDodgeChance);
+    const dodgeMaximum = Number.isFinite(configuredMaximum) ? clamp(configuredMaximum, 0, 100) : 95;
+    const dodgeChance = clamp(combatStat(target, dodgeKey), 0, dodgeMaximum);
     if (random() * 100 < dodgeChance) return { dodged: true, reason: `${dodgeKey} 閃避`, dodgeChance };
     return { dodged: false, dodgeChance };
   }

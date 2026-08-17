@@ -53,3 +53,7 @@ Patchnote_main_color,#0000FF,patchnote最上方 [0.2] [0.3]欄位這邊顏色
 Patchnote_ver_color,#00FFFF,--- Ver 0.2.002 ---  版本號這串字的顏色
 Patchnote_type_color,#FF8000,Patchnote中type的標題顏色
 Patchnote_color,#FFFFFF,Patchnote內容的顏色
+buff_color,#00FFFF,Buff/Debuff 狀態欄位的 正面 狀態顏色
+debuff_color,#FF0000,Buff/Debuff 狀態欄位的 負面 狀態顏色
+buff_sec_color,#FFFF00,Buff/Debuff 狀態欄位的 秒數 狀態顏色
+right_heal_color,#00FF00,治療的數字顏色
