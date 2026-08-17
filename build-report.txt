@@ -1,5 +1,5 @@
 Dream-Crafter GitHub Pages Build Report
-建立時間：2026-08-17T13:35:22.393Z
+建立時間：2026-08-17T14:52:27.606Z
 來源：build_github.bat 所在的專案根目錄（dreamer-game-data-v1-xlsx-rpg）
 
 【已複製／產生】

@@ -49,3 +49,12 @@ sk045,血淚詛咒,magic,aoe,100,100,1,HPR,enemy_aoe,-111,7,,,,
 sk046,聖光祝福,buff,aoe,0,0,0,HPR,ally_aoe,-111,6,,,,
 sk047,亡靈退散！,buff,aoe,0,0,0,HP,ally_aoe,-333,1,,,,
 sk048,最後一次幫你稱10秒,buff,none,0,0,1,HPR,enemy_aoe,66,10,HPR,self,-999,10
+sk049,魂體轉換,magic,random,100,100,1,HPR,DMGchoose,-200,1,MPR,DMGchoose,200,1
+sk050,屍爆術,magic,ALLaoe,250,150,1,,,,,,,,
+sk051,堆屍牆,buff,none,0,0,0,AC,ally_aoe,250,10,MR,ally_aoe,250,10
+sk052,殭屍復甦．殞落,magic,random,200,200,1,DMG,random,,,DMG,random,,
+sk053,肉山衝撞,physical,front,150,200,1,DMG,middle,,,,,,
+sk054,血肉再生,buff,none,0,0,0,HPR,ally_aoe,666,3,HP,self,500,0
+sk055,你這次護駕有功,buff,none,0,0,0,AC,random,33,5,MR,random,33,5
+sk056,索命黑令旗,buff,none,0,0,0,ATK,ALLaoe,33,5,ADAM,ALLaoe,33,5
+sk057,斬擊(佯攻),physical,front,250,250,1,DMG,ally_aoe,,,,,,
