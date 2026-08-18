@@ -1,15 +1,15 @@
 class_id,name,skill_id,level,cost,cooldown,skill_color,damage_type,damage_target,base_damage,multiplier,cast_time,is_book,effect1,effect1_target,effect1_value,effect1_sec,effect2,effect2_target,effect2_value,effect2_sec,effect_Attribute,effect_multi,enabled,use_priority,trigger_type,trigger_value,min_targets,skill_intro
 warrior,攻擊,csk100,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
-warrior,重擊,csk101,1,5,1,#CC6600,physical,front,0,80,0,TRUE,,,,,,,,,,,TRUE,99,,,,
+warrior,重擊,csk101,1,5,1,#CC6600,physical,front,0,120,0,TRUE,,,,,,,,,,,TRUE,99,,,,
 warrior,戰士之道,csk102,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,AC,self,5,60,,,,,CON,0.1,TRUE,39,,,,[成長] | [buff]
-warrior,氣刃斬,csk103,5,25,2,#CC6600,physical,aoe,5,80,0,TRUE,,,,,,,,,,,TRUE,69,,,,
+warrior,氣刃斬,csk103,5,25,2,#CC6600,physical,aoe,5,100,0,TRUE,,,,,,,,,,,TRUE,69,,,,
 warrior,月孤斬,csk104,8,16,2,#CC6600,physical,front,8,140,0,TRUE,,,,,,,,,STR,0.1,TRUE,98,,,,[成長]
 warrior,戰士的自我修養 Lv.11,csk105,11,50,300,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,5,60,ATK,self,1,60,STR,0.1,TRUE,10,,,,[成長] | [buff]
 warrior,十字斬,csk106,13,26,3,#CC6600,physical,front,13,160,0,TRUE,HPR,middle,-300,1,,,,,,,TRUE,68,,,,
 warrior,劍氣護體,csk107,15,50,60,#FFFF00,buff,none,0,0,0,TRUE,AC,self,10,60,MR,self,10,60,STR,0.1,TRUE,38,,,,[成長] | [buff]
 warrior,流星劍,csk108,18,36,4,#CC6600,physical,front,18,100,0,TRUE,ASPD,self,300,1,,,,,,,TRUE,97,,,,[犧牲] 蠻三刀
 warrior,不屈意志,csk109,23,50,60,#FFFF00,buff,none,0,0,0,TRUE,HPR,self,50,60,AAR,self,5,60,CON,0.1,TRUE,37,,,,[成長] | [buff]
-warrior,蒼龍破,csk110,27,81,3,#CC6600,physical,aoe,27,100,0,TRUE,,,,,,,,,STR,0.1,TRUE,96,,,,[成長]
+warrior,蒼龍破,csk110,27,81,3,#CC6600,physical,aoe,27,110,0,TRUE,,,,,,,,,STR,0.1,TRUE,96,,,,[成長]
 warrior,戰士的自我修養 Lv.31,csk111,31,100,300,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,10,60,ATK,self,5,60,STR,0.2,TRUE,9,,,,[成長] | [buff]
 mage,魔法彈,csk200,1,0,0,#FFFFFF,magic,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
 mage,風刃,csk201,1,7,0,#00FFFF,magic,front,1,130,0,TRUE,,,,,,,,,,,TRUE,99,,,,
