@@ -3519,7 +3519,7 @@ function monsterSkillTriggerSatisfied(use) {
 function updateMonsterAction(enemy, dt) {
   enemy.cooldown -= dt;
   for (const skillId of Object.keys(enemy.skillCooldowns ?? {})) enemy.skillCooldowns[skillId] = Math.max(0, enemy.skillCooldowns[skillId] - dt);
-  enemy.buffs = (enemy.buffs ?? []).map((buff) => ({ ...buff, remaining: buff.remaining - dt })).filter((buff) => buff.remaining > 0);
+  if (updateTimedSkillStatuses(enemy, dt)) return;
   if (enemy.casting) {
     enemy.casting.remaining -= dt;
     if (enemy.casting.remaining <= 0) {
@@ -3613,6 +3613,21 @@ function parseConfiguredEffectValue(rawValue) {
   return { percentage, value: Number.isFinite(value) ? value : 0, raw: text };
 }
 
+function parseDotEffectValue(rawValue, skill = {}, effect = {}) {
+  const raw = String(rawValue ?? "").trim();
+  const percentage = raw.endsWith("%");
+  const numericText = percentage ? raw.slice(0, -1).trim() : raw;
+  const numericValue = Number(numericText);
+  const parsed = { raw, percentage, value: numericValue };
+  if (raw && numericText && Number.isFinite(numericValue) && numericValue >= 0) return { ...parsed, valid: true };
+  const warningKey = `invalid-dot:${skill.skill_id ?? skill.name ?? "unknown"}:${effect.index ?? "?"}:${parsed.raw}`;
+  if (!runtimeWarningKeys.has(warningKey)) {
+    runtimeWarningKeys.add(warningKey);
+    console.warn(`[WARN] skill ${skill.skill_id ?? skill.name ?? "unknown"} effect${effect.index ?? "?"} has invalid DOT value: ${parsed.raw || "(blank)"}.`);
+  }
+  return { ...parsed, valid: false };
+}
+
 function baseAttributeValue(target, stat) {
   return Number(target?.[stat]) || 0;
 }
@@ -3652,6 +3667,77 @@ function addTimedSkillEffect(target, caster, skill, effect, value, skillColor = 
   return true;
 }
 
+function addTimedDotEffect(target, caster, skill, effect, damagePerSecond, skillColor = null) {
+  const seconds = Number(effect.seconds);
+  const dps = Number(damagePerSecond);
+  if (!(seconds > 0) || !(dps > 0) || !Number.isFinite(seconds) || !Number.isFinite(dps)) return false;
+  target.buffs ??= [];
+  const casterEntityKey = statusCasterEntityKey(caster);
+  const effectKey = `${casterEntityKey}:${skill.skill_id}:${effect.index}`;
+  const existing = target.buffs.find((buff) => buff.effectKey === effectKey);
+  const next = {
+    effectKey, casterEntityKey, casterName: caster.name, sourceName: caster.name,
+    skillId: skill.skill_id, skillName: skill.name, name: skill.name,
+    skillColor: csvColor(skillColor || skill.skill_color, "#ededed"),
+    effectIndex: effect.index, stat: "DOT", statusKind: "DOT",
+    value: -dps, effectAmount: -dps, snapshotDotDamagePerSecond: dps,
+    dotRemainingDamage: dps * seconds, duration: seconds, remaining: seconds,
+  };
+  if (existing) Object.assign(existing, next);
+  else target.buffs.push(next);
+  return true;
+}
+
+function mainDamageForTarget(context, target) {
+  return Math.max(0, Number(context.mainDamageByTarget?.get?.(target)) || 0);
+}
+
+function logAppliedDot(caster, skill, target, damagePerSecond, seconds, context = {}) {
+  const dotText = `每秒受到 ${formatExactNumber(damagePerSecond)} 點持續傷害，持續 ${formatExactNumber(seconds)} 秒。`;
+  addLog(`${caster.name} 的 ${skill.name} 使 ${target.name} ${dotText}`, {
+    channel: context.channel, skillName: skill.name, skillColor: context.skillColor, dotText,
+  });
+}
+
+function resolveDotCausedDeath(target, status) {
+  if (!target || target.hp > 0 || !status) return false;
+  if (state.roster.includes(target)) return handleHeroDeath(target, { kind: "dot", buff: status });
+  const skillName = status.skillName || status.name || "持續傷害";
+  const sourceName = status.sourceName || status.casterName || "未知來源";
+  addLog(`${target.name} 被 ${sourceName} 的 ${skillName} 擊殺。`, {
+    channel: state.enemies.includes(target) ? "monster" : "other",
+    skillName, skillColor: status.skillColor,
+  });
+  if (state.enemies.includes(target)) defeatMonster(target);
+  else target.buffs = [];
+  return true;
+}
+
+function updateTimedSkillStatuses(unit, dt) {
+  if (!unit || dt <= 0) return false;
+  const next = [];
+  let lethalDot = null;
+  for (const status of unit.buffs ?? []) {
+    const remaining = Math.max(0, Number(status.remaining) || 0);
+    const activeSeconds = Math.min(dt, remaining);
+    const updated = { ...status };
+    if (status.statusKind === "DOT" && unit.hp > 0 && activeSeconds > 0) {
+      const dps = Math.max(0, Number(status.snapshotDotDamagePerSecond) || 0);
+      const storedRemaining = Number(status.dotRemainingDamage);
+      const remainingDamage = Number.isFinite(storedRemaining) ? Math.max(0, storedRemaining) : dps * remaining;
+      const damage = activeSeconds >= remaining - 1e-9 ? remainingDamage : Math.min(remainingDamage, dps * activeSeconds);
+      unit.hp = Math.max(0, (Number(unit.hp) || 0) - damage);
+      updated.dotRemainingDamage = Math.max(0, remainingDamage - damage);
+      if (unit.hp <= 0) lethalDot = updated;
+    }
+    updated.remaining = remaining - dt;
+    if (updated.remaining > 1e-9) next.push(updated);
+    if (lethalDot) break;
+  }
+  unit.buffs = next;
+  return lethalDot ? resolveDotCausedDeath(unit, lethalDot) : false;
+}
+
 function applyRecoveryAmount(target, resource, calculatedRecovery) {
   const currentKey = resource === "HP" ? "hp" : "mp";
   const maximumKey = resource === "HP" ? "maxHp" : "maxMp";
@@ -3686,10 +3772,15 @@ function executeMonsterSkill(enemy, skill, skillColor) {
   const opponents = monsterOpponentFormation();
   const mainTargets = resolveSkillTargetSet(enemy, skill.damage_target, allies, opponents);
   let mainDamageTotal = 0;
+  const mainDamageByTarget = new Map(mainTargets.map((target) => [target, 0]));
   if (["physical", "magic"].includes(skill.damage_type)) {
     for (const target of mainTargets) {
       const result = executeSkillDamageComponent(enemy, target, skill, { channel: "monster", skillColor, baseDamage: skill.base_damage });
-      if (result.hit) mainDamageTotal += Number(result.damageDealt) || 0;
+      if (result.hit) {
+        const actualDamage = Number(result.damageDealt) || 0;
+        mainDamageTotal += actualDamage;
+        mainDamageByTarget.set(target, actualDamage);
+      }
     }
   }
   if (skill.damage_type === "heal") {
@@ -3699,7 +3790,7 @@ function executeMonsterSkill(enemy, skill, skillColor) {
       logSkillRecovery(enemy, skill, target, recovery, { channel: "monster", skillColor }, result.critical.isCritical);
     }
   }
-  applyConfiguredSkillEffects(enemy, skill, { channel: "monster", skillColor, allies, opponents, mainTargets, mainDamageTotal, baseDamage: skill.base_damage });
+  applyConfiguredSkillEffects(enemy, skill, { channel: "monster", skillColor, allies, opponents, mainTargets, mainDamageTotal, mainDamageByTarget, baseDamage: skill.base_damage });
 }
 
 function monsterEffectTargets(enemy, targetType) {
@@ -3781,6 +3872,19 @@ function applyConfiguredSkillEffects(caster, skill, context) {
       applyDirectResourceEffect(caster, skill, { ...effect, stat: resource }, caster, roundSigned(amount), context);
       continue;
     }
+    if (effect.stat === "DOT") {
+      const parsed = parseDotEffectValue(effect.value, skill, effect);
+      const seconds = Number(effect.seconds);
+      if (!parsed.valid || !(seconds > 0) || !Number.isFinite(seconds)) continue;
+      const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
+      for (const target of targets.filter((candidate) => candidate.hp > 0)) {
+        const damagePerSecond = parsed.percentage ? mainDamageForTarget(context, target) * parsed.value / 100 : parsed.value;
+        if (addTimedDotEffect(target, caster, skill, effect, damagePerSecond, context.skillColor)) {
+          logAppliedDot(caster, skill, target, damagePerSecond, seconds, context);
+        }
+      }
+      continue;
+    }
     const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
     if (["HP", "MP"].includes(effect.stat)) {
       for (const target of targets.filter((candidate) => candidate.hp > 0)) {
@@ -3839,7 +3943,7 @@ function updateTownRecovery(dt) {
   if (dt <= 0) return;
   const townRate = clamp(Number(systemSettings().town_recover) || 0, 0, 100) / 100;
   for (const hero of state.roster) {
-    hero.buffs = (hero.buffs ?? []).map((buff) => ({ ...buff, remaining: buff.remaining - dt })).filter((buff) => buff.remaining > 0);
+    if (updateTimedSkillStatuses(hero, dt)) continue;
     const hpRecovery = hero.maxHp * townRate + combatStat(hero, "HPR");
     const mpRecovery = hero.maxMp * townRate + combatStat(hero, "MPR");
     hero.hp = clamp(roundSigned(hero.hp + hpRecovery * dt), 0, hero.maxHp);
@@ -3883,7 +3987,7 @@ function applyRegeneration(actor, dt) {
 function updateHeroAction(actor, dt) {
   actor.cooldown -= dt;
   for (const skillId of Object.keys(actor.skillCooldowns)) actor.skillCooldowns[skillId] = Math.max(0, actor.skillCooldowns[skillId] - dt);
-  actor.buffs = actor.buffs.map((buff) => ({ ...buff, remaining: buff.remaining - dt })).filter((buff) => buff.remaining > 0);
+  if (updateTimedSkillStatuses(actor, dt)) return;
   if (actor.casting) {
     actor.casting.remaining -= dt;
     if (actor.casting.remaining <= 0) {
@@ -3969,9 +4073,14 @@ function executeDamageSkill(actor, skill) {
   const context = { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
     baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) };
   context.mainDamageTotal = 0;
+  context.mainDamageByTarget = new Map(mainTargets.map((target) => [target, 0]));
   for (const target of mainTargets) {
     const result = executeSkillDamageComponent(actor, target, skill, context);
-    if (result.hit) context.mainDamageTotal += Number(result.damageDealt) || 0;
+    if (result.hit) {
+      const actualDamage = Number(result.damageDealt) || 0;
+      context.mainDamageTotal += actualDamage;
+      context.mainDamageByTarget.set(target, actualDamage);
+    }
   }
   applyConfiguredSkillEffects(actor, skill, context);
 }
@@ -4058,6 +4167,10 @@ function handleHeroDeath(hero, context = {}) {
     });
   } else if (context.kind === "equipment-hpr") {
     addLog(`${hero.name} 想要穿著鐵處女變強，沒想到他就這樣離開了大家。`, { channel: "player" });
+  } else if (context.kind === "dot" && buff?.sourceName && (buff.skillName || buff.name)) {
+    addLog(`${hero.name} 被 ${buff.sourceName} 的 ${buff.skillName || buff.name} 擊殺。`, {
+      channel: "player", skillName: buff.skillName || buff.name, skillColor: buff.skillColor,
+    });
   } else if (context.kind === "continuous" && buff?.sourceName && (buff.skillName || buff.name)) {
     addLog(`${buff.sourceName} 對${hero.name} 使用 ${buff.skillName || buff.name} 造成了持續性傷害以致死亡。`, {
       channel: "player", skillName: buff.skillName || buff.name,
@@ -4365,6 +4478,7 @@ function coloredLogHtml(text, meta = {}) {
   addToken("暴擊", gameColor("critical_hit"), "log-critical", 9);
   if (meta.critical && meta.damage !== null && meta.damage !== undefined) addToken(formatExactNumber(meta.damage), gameColor("critical_hit"), "log-critical-damage", 7);
   addToken(meta.recoveryText, indexedColor("right_heal_color", "#00FF00"), "log-recovery", 10);
+  addToken(meta.dotText, indexedColor("right_DOT_color", "#FF007F"), "log-dot", 10);
   addToken(meta.deathPenaltyText, indexedColor("Death_Penalty_color"), "log-death-penalty", 10);
 
   const candidates = [];
@@ -4430,7 +4544,10 @@ function render() {
 
 function statusEffectText(status) {
   const amount = Number(status.effectAmount ?? status.value) || 0;
-  return `${status.casterName ?? status.sourceName ?? "未知來源"} | ${status.skillName ?? status.name ?? status.skillId ?? "未知技能"} | ${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)} (${Math.max(0, Math.ceil(Number(status.remaining) || 0))}s)`;
+  const effectText = status.statusKind === "DOT"
+    ? `每秒 HP -${formatExactNumber(status.snapshotDotDamagePerSecond)}`
+    : `${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)}`;
+  return `${status.casterName ?? status.sourceName ?? "未知來源"} | ${status.skillName ?? status.name ?? status.skillId ?? "未知技能"} | ${effectText} (${Math.max(0, Math.ceil(Number(status.remaining) || 0))}s)`;
 }
 
 function statusSkillColor(status) {
@@ -4488,7 +4605,9 @@ function renderStatusDetailRow(status) {
   const row = document.createElement("p"); row.className = "status-detail";
   const caster = document.createElement("span"); caster.textContent = status.casterName ?? status.sourceName ?? "未知來源";
   const skill = document.createElement("span"); skill.textContent = status.skillName ?? status.name ?? status.skillId ?? "未知技能"; skill.style.color = statusSkillColor(status);
-  const effect = document.createElement("span"); effect.textContent = `${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)}`;
+  const effect = document.createElement("span"); effect.textContent = status.statusKind === "DOT"
+    ? `每秒 HP -${formatExactNumber(status.snapshotDotDamagePerSecond)}`
+    : `${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)}`;
   effect.style.color = indexedColor(amount >= 0 ? "buff_color" : "debuff_color", amount >= 0 ? "#00FFFF" : "#FF0000");
   const seconds = document.createElement("span"); seconds.textContent = `(${Math.max(0, Math.ceil(Number(status.remaining) || 0))}s)`;
   seconds.style.color = indexedColor("buff_sec_color", "#FFFF00");

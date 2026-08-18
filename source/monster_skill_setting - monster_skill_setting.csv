@@ -6,7 +6,7 @@ sk002,魔法彈,magic,front,1,100,0,,,,,,,,
 sk003,撞擊,physical,front,10,150,0,,,,,,,,
 sk004,怨念,magic,aoe,10,200,3,ASPD,enemy_aoe,-25,20,,,,
 sk005,堅固防禦,buff,none,0,0,1,AC,self,150%,60,,,,
-sk006,酸液噴射,magic,aoe,15,100,1,HPR,enemy_aoe,-20,10,,,,
+sk006,酸液噴射,magic,aoe,15,100,1,DOT,enemy_aoe,100%,10,,,,
 sk007,火球,magic,aoe,50,150,1,,,,,,,,
 sk008,冰箭,magic,random,50,200,1,,,,,,,,
 sk009,落雷,magic,random,50,175,1,DMG,random,,,,,,
@@ -26,7 +26,7 @@ sk022,黑闇降臨,magic,aoe,20,150,1,SAR,enemy_aoe,-30,10,AAR,enemy_aoe,-30,10
 sk023,左右互搏,physical,front,88,150,1,DMG,random,,,,,,
 sk024,希望的微光,magic,none,0,0,5,MR,enemy_aoe,66,10,AC,enemy_aoe,66,10
 sk025,神聖彗星,magic,aoe,111,250,2,HP,ally_aoe,-777,0,HPR,ally_aoe,-66,5
-sk026,爆炸！,magic,aoe,88,288,4,HPR,ALL_aoe,-66,3,HPR,self,-333,3
+sk026,爆炸！,magic,aoe,88,288,4,HPR,ALLaoe,-66,3,HPR,self,-333,3
 sk027,為了吾王,buff,none,0,0,0,ATK,ally_aoe,30,10,MATK,ally_aoe,30,10
 sk028,治癒圖騰,buff,none,0,0,0,HPR,ally_aoe,300,5,,,,
 sk029,狂暴血戰,buff,aoe,150,150,0,ADAM,self,100,20,AC,self,-50,20

@@ -57,3 +57,4 @@ buff_color,#00FFFF,Buff/Debuff 狀態欄位的 正面 狀態顏色
 debuff_color,#FF0000,Buff/Debuff 狀態欄位的 負面 狀態顏色
 buff_sec_color,#FFFF00,Buff/Debuff 狀態欄位的 秒數 狀態顏色
 right_heal_color,#00FF00,治療的數字顏色
+right_DOT_color,#FF007F,DOT的顏色
