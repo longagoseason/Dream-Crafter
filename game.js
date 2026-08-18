@@ -58,6 +58,17 @@ function aarSarMaximum() {
   return 95;
 }
 
+function configuredArmorRate() {
+  const configured = Number(systemSettings()?.armor_rate);
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  const warningKey = "invalid:armor_rate";
+  if (!runtimeWarningKeys.has(warningKey)) {
+    runtimeWarningKeys.add(warningKey);
+    console.warn("[WARN] Dreamer_Syetem.csv armor_rate is invalid; fallback to 2.");
+  }
+  return 2;
+}
+
 function rollConfiguredAttackAvoidance(attacker, target, damageType, random = Math.random) {
   return rollAttackAvoidance(attacker, target, damageType, random, aarSarMaximum());
 }
@@ -2637,7 +2648,7 @@ function setupPortableGridDelegation(grid, handler) {
   if (!grid || grid.dataset.delegatedClick === "true") return;
   grid.dataset.delegatedClick = "true";
   grid.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-visible-index]");
+    const button = delegatedButtonFromEvent(event, grid, "button[data-visible-index]");
     if (!button || button.disabled || !grid.contains(button)) return;
     handler(Number(button.dataset.visibleIndex));
   });
@@ -2647,10 +2658,19 @@ function setupCollectionEquipmentDelegation(grid) {
   if (!grid || grid.dataset.delegatedClick === "true") return;
   grid.dataset.delegatedClick = "true";
   grid.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-collection-slot]");
+    const button = delegatedButtonFromEvent(event, grid, "button[data-collection-slot]");
     if (!button || button.disabled || !grid.contains(button)) return;
     removeCollectionEquipment(button.dataset.collectionSlot);
   });
+}
+
+function delegatedButtonFromEvent(event, container, selector) {
+  const pathMatch = typeof event.composedPath === "function"
+    ? event.composedPath().find((node) => node?.matches?.(selector))
+    : null;
+  const targetMatch = event.target?.closest?.(selector);
+  const button = pathMatch ?? targetMatch;
+  return button && container.contains(button) ? button : null;
 }
 
 function renderPortableEntryCell(cell, entry, emptyLabel = "空白格") {
@@ -3708,7 +3728,7 @@ function executeSkillDamageComponent(caster, target, skill, context = {}) {
     addLog(`${caster.name} 的 ${skill.name} 被 ${target.name} ${avoidance.reason}。`, { channel: context.channel, skillName: skill.name, skillColor: context.skillColor });
     return { hit: false, dodged: true, target };
   }
-  const result = calculateAttackDamage(caster, target, skill.damage_type, context.baseDamage ?? skill.base_damage, skill.multiplier / 100);
+  const result = calculateAttackDamage(caster, target, skill.damage_type, context.baseDamage ?? skill.base_damage, skill.multiplier / 100, Math.random, configuredArmorRate());
   const hpBefore = Math.max(0, Number(target.hp) || 0);
   target.hp = round(target.hp - result.damage);
   // Leech is based on HP that was actually removed; overkill damage cannot be absorbed.
@@ -3989,7 +4009,7 @@ function playerAttack(actor, enemy) {
   const damageType = isMagic ? "magic" : "physical";
   const avoidance = rollConfiguredAttackAvoidance(actor, enemy, damageType);
   if (avoidance.dodged) { addLog(`${actor.name} 的攻擊被 ${enemy.name} ${avoidance.reason}。`, { channel: "player" }); return; }
-  const result = calculateAttackDamage(actor, enemy, damageType, 0, 1);
+  const result = calculateAttackDamage(actor, enemy, damageType, 0, 1, Math.random, configuredArmorRate());
   enemy.hp = round(enemy.hp - result.damage); addLog(`${actor.name} 對 ${enemy.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
     { channel: "player", critical: result.critical.isCritical, damage: result.damage });
   if (enemy.hp <= 0) defeatMonster(enemy);
@@ -4001,7 +4021,7 @@ function monsterAttack(enemy, target) {
   const avoidance = rollConfiguredAttackAvoidance(enemy, target, damageType);
   if (avoidance.dodged) { addLog(`${enemy.name} 的攻擊被 ${target.name} ${avoidance.reason}。`, { channel: "monster" }); return; }
   const basicSkill = state.data.skill.find((skill) => skill.skill_id === (magic ? "sk002" : "sk001"));
-  const result = calculateAttackDamage(enemy, target, damageType, basicSkill?.base_damage ?? 0, basicSkill?.multiplier ? basicSkill.multiplier / 100 : 1);
+  const result = calculateAttackDamage(enemy, target, damageType, basicSkill?.base_damage ?? 0, basicSkill?.multiplier ? basicSkill.multiplier / 100 : 1, Math.random, configuredArmorRate());
   target.hp = round(target.hp - result.damage); addLog(`${enemy.name} 攻擊前排 ${target.name}，造成 ${result.damage} 傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
     { channel: "monster", critical: result.critical.isCritical, damage: result.damage });
   if (target.hp <= 0) handleHeroDeath(target, { kind: "direct", sourceName: enemy.name, skillName: "攻擊", damage: result.damage, critical: result.critical.isCritical });

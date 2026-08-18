@@ -1,5 +1,5 @@
 Dream-Crafter GitHub Pages Build Report
-建立時間：2026-08-17T14:52:27.606Z
+建立時間：2026-08-18T07:09:52.436Z
 來源：build_github.bat 所在的專案根目錄（dreamer-game-data-v1-xlsx-rpg）
 
 【已複製／產生】
@@ -12,6 +12,7 @@ JSON：source/manifest.json（只列出本次啟動必須下載的 CSV；不保�
 音效：0（目前沒有 runtime 引用）
 字型：0（目前沒有 runtime 引用）
 其他 runtime dependency：.nojekyll
+戰鬥設定：armor_rate=2
 
 【未複製】
 - .agents/、.codex/、.git/（開發與版本控制資料）

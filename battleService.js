@@ -44,14 +44,17 @@
     return { dodged: false, dodgeChance };
   }
 
-  function mitigate(raw, target, defenseKey, attackerLevel, random = Math.random) {
+  function mitigate(raw, target, defenseKey, attackerLevel, random = Math.random, armorRate = 2) {
     const defense = combatStat(target, defenseKey);
-    const proc = clamp(defense / (attackerLevel * 5), 0, 1);
+    const level = Math.max(1, Number(attackerLevel) || 1);
+    const divisor = Number(armorRate);
+    const safeArmorRate = Number.isFinite(divisor) && divisor > 0 ? divisor : 2;
+    const proc = clamp(defense / (level * 5) * .5, 0, .5);
     const afterProc = random() < proc ? raw * .5 : raw;
-    return round(Math.max(1, afterProc - defense / 10));
+    return round(Math.max(1, afterProc - defense / safeArmorRate));
   }
 
-  function calculateAttackDamage(attacker, target, damageType, baseDamage = 0, skillMultiplier = 1, random = Math.random) {
+  function calculateAttackDamage(attacker, target, damageType, baseDamage = 0, skillMultiplier = 1, random = Math.random, armorRate = 2) {
     const isMagic = damageType === "magic";
     const base = Math.max(0, combatStat(attacker, isMagic ? "MATK" : "ATK"));
     const attribute = Math.max(0, combatStat(attacker, isMagic ? "INT" : "STR"));
@@ -60,7 +63,7 @@
     const critical = rollCritical(attacker, random);
     const damageMultiplier = Math.max(0, 1 + combatStat(attacker, isMagic ? "MDAM" : "ADAM") / 100);
     const rawDamage = roll.value * skillMultiplier * critical.multiplier * damageMultiplier;
-    const damage = mitigate(Math.max(1, rawDamage), target, isMagic ? "MR" : "AC", attacker.level, random);
+    const damage = mitigate(Math.max(1, rawDamage), target, isMagic ? "MR" : "AC", attacker.level, random, armorRate);
     return { damage, roll, critical, rawDamage };
   }
 
