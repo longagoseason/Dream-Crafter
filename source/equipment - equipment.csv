@@ -2,17 +2,17 @@ item_id,item_name,sell_gold,EQ_position,weapon_type,allowed_class,mid_figure,mid
 eq0001,初心胸甲,100,body,,all,body.png,#A0A0A0,1,,,,,1,1,,,,,,,,,,,,,,
 eq0002,初心頭盔,100,helmet,,all,helmet.png,#A0A0A0,1,,,,,1,1,,,,,,,,,,,,,,
 eq0003,初心盾牌,100,shield,,all,shield.png,#A0A0A0,1,,,,,1,1,,,,,,,,,,,,,,
-eq0004,初心手套,100,gloves,,all,gloves.png,#A0A0A0,1,,,,,,,1,1,,,,,1,1,,,,,,
+eq0004,初心手套,100,gloves,,all,gloves.png,#A0A0A0,1,,,,,,,1,1,,,,,,,,,,,,
 eq0005,初心長靴,100,shoe,,all,shoe.png,#A0A0A0,1,,,,,1,1,,,,,,,,,,,,,,
 eq0006,初心護膝,100,kneepads,,all,kneepads.png,#A0A0A0,1,,,,,,,1,1,,,,,,,,,,,,
 eq0007,初心戒指,100,ring,,all,ring.png,#A0A0A0,1,,,,,1,,,,,,,,,,,,,,,
 eq0008,初心耳環,100,earrings,,all,earrings.png,#A0A0A0,1,,,,,,,,,10,,10,,,,,,,,,
-eq0009,初心項鍊,100,necklace,,all,necklace.png,#A0A0A0,1,,,,,,,,,,,,,5,5,,,,,,
+eq0009,初心項鍊,100,necklace,,all,necklace.png,#A0A0A0,1,,,,,,,,,,,,,1,1,,,,,,
 eq0010,木劍,100,physical_weapon,one_hand_weapon,warrior|thief,sword.png,#A0A0A0,1,2,,,,,,,,,,,,,,1,,,,,1
 eq0011,木杖,100,magic_weapon,two_hand_weapon,mage|priest,wand.png,#A0A0A0,1,,2,,,,,,,,,10,,,,,,1,1,,
-eq0012,布拳套,100,physical_weapon,martial_weapon,martial,knuckles.png,#A0A0A0,1,2,,,,,,,,,,,,10,,1,1,,,,
+eq0012,布拳套,100,physical_weapon,martial_weapon,martial,knuckles.png,#A0A0A0,1,2,,,,,,,,,,,,5,,1,1,,,,
 eq0013,史萊姆 核心,500,core,,all,core.png,#FF00FF,5,,,,,5,5,,,100,0.5,100,0.5,,,1,1,1,1,1,1
-eq0014,利姆露 玩偶,500,idol,,all,idol.png,#FF00FF,5,2,2,2,50,,,,,,,,,10,10,,,,,,
+eq0014,利姆露 玩偶,500,idol,,all,idol.png,#FF00FF,5,2,2,2,50,,,,,,,,,2,2,,,,,,
 eq0015,Lv.1 力量戒指,1000,ring,,all,ring.png,#A0A0A0,10,,,,,1,1,,,,,,,,,2,,,,,
 eq0016,Lv.1 體質戒指,1000,ring,,all,ring.png,#A0A0A0,10,,,,,1,1,,,,,,,,,,2,,,,
 eq0017,Lv.1 智慧戒指,1000,ring,,all,ring.png,#A0A0A0,10,,,,,1,1,,,,,,,,,,,2,,,
@@ -21,7 +21,7 @@ eq0019,Lv.1 敏捷戒指,1000,ring,,all,ring.png,#A0A0A0,10,,,,,1,1,,,,,,,,,,,,,
 eq0020,Lv.1 幸運戒指,1000,ring,,all,ring.png,#A0A0A0,10,,,,,1,1,,,,,,,,,,,,,,2
 eq0021,利姆露 耳環,1000,earrings,,all,earrings.png,#FF00FF,10,,,,,,,,,,1,,0.3,,,,1,,1,,
 eq0022,利姆露 王冠,1000,helmet,,all,helmet.png,#FF00FF,10,,,,,6,6,,,,1,,0.3,,,1,1,1,1,1,1
-eq0023,利姆露 皇后之翼,1000,necklace,,all,necklace.png,#FF00FF,10,,,,,,,,,,1,,0.3,15,15,1,1,1,1,1,1
+eq0023,利姆露 皇后之翼,1000,necklace,,all,necklace.png,#FF00FF,10,,,,,,,,,,1,,0.3,2,2,1,1,1,1,1,1
 eq0024,Ａ 胸甲,1000,body,,all,body.png,#A0A0A0,10,,,,,6,6,,,,,,,,,,,,,,
 eq0025,Ａ 頭盔,1000,helmet,,all,helmet.png,#A0A0A0,10,,,,,6,6,,,,,,,,,,,,,,
 eq0026,Ａ 盾牌,1000,shield,,all,shield.png,#A0A0A0,10,,,,,6,6,,,,,,,,,,,,,,
@@ -30,10 +30,10 @@ eq0028,Ａ 長靴,1000,shoe,,all,shoe.png,#A0A0A0,10,,,,,6,6,,,,,,,,,,,,,,
 eq0029,Ａ 護膝,1000,kneepads,,all,kneepads.png,#A0A0A0,10,,,,,,,4,4,,,,,,,,,,,,
 eq0030,Ａ 戒指,1000,ring,,all,ring.png,#A0A0A0,10,,,,,2,2,,,,,,,,,,,,,,
 eq0031,Ａ 耳環,1000,earrings,,all,earrings.png,#A0A0A0,10,,,,,,,,,20,,20,,,,,,,,,
-eq0032,Ａ 項鍊,1000,necklace,,all,necklace.png,#A0A0A0,10,,,,,,,,,,,,,7,7,,,,,,
+eq0032,Ａ 項鍊,1000,necklace,,all,necklace.png,#A0A0A0,10,,,,,,,,,,,,,3,3,,,,,,
 eq0033,Ａ 長劍,1000,physical_weapon,one_hand_weapon,warrior|thief,sword.png,#A0A0A0,10,12,,,,,,,,,,,,,,5,,,,,1
 eq0034,Ａ 法杖,1000,magic_weapon,two_hand_weapon,mage|priest,wand.png,#A0A0A0,10,,12,,,,,,,20,,20,,,,,,1,5,,
-eq0035,Ａ 拳套,1000,physical_weapon,martial_weapon,martial,knuckles.png,#A0A0A0,10,12,,,,,,,,,,,,10,,3,3,,,,
+eq0035,Ａ 拳套,1000,physical_weapon,martial_weapon,martial,knuckles.png,#A0A0A0,10,12,,,,,,,,,,,,5,,3,3,,,,
 eq0036,Ａ 魔法球,1000,magic_weapon,two_hand_weapon,mage,magicball.png,#A0A0A0,10,,15,2,,,,,,,,,,,,,,5,1,,
 eq0037,Ａ 匕首,1000,physical_weapon,one_hand_weapon,thief,knife.png,#A0A0A0,10,10,,2,30,,,,,,,,,,,,,,,3,3
 eq0038,Lv.2 力量戒指,1500,ring,,all,ring.png,#A0A0A0,15,,,,,2,2,,,,,,,,,4,,,,,
@@ -42,8 +42,8 @@ eq0040,Lv.2 智慧戒指,1500,ring,,all,ring.png,#A0A0A0,15,,,,,2,2,,,,,,,,,,,4,
 eq0041,Lv.2 精神戒指,1500,ring,,all,ring.png,#A0A0A0,15,,,,,2,2,,,,,,,,,,,,4,,
 eq0042,Lv.2 敏捷戒指,1500,ring,,all,ring.png,#A0A0A0,15,,,,,2,2,,,,,,,,,,,,,4,
 eq0043,Lv.2 幸運戒指,1500,ring,,all,ring.png,#A0A0A0,15,,,,,2,2,,,,,,,,,,,,,,4
-eq0044,聖劍碎片 希魯達,1500,idol,,all,idol.png,#FF00FF,15,12,12,5,80,,,,,,,,,20,20,,,,,,
-eq0045,祈願 松木法杖,1500,magic_weapon,two_hand_weapon,priest,wand.png,#FF00FF,15,,30,,,,,,,,,50,,,10,,,5,10,,
+eq0044,聖劍碎片 希魯達,1500,idol,,all,idol.png,#FF00FF,15,12,12,5,80,,,,,,,,,3,3,,,,,,
+eq0045,祈願 松木法杖,1500,magic_weapon,two_hand_weapon,priest,wand.png,#FF00FF,15,,30,,,,,,,,,50,,,3,,,5,10,,
 eq0046,哥布林 斷刃,1500,physical_weapon,one_hand_weapon,warrior|thief,sword.png,#FF00FF,15,25,,5,50,,,,,,,,,,,,,,,,
 eq0047,哥布林 貪慾核心,1500,core,,all,core.png,#FF00FF,15,,,,,-5,-5,,,10,,10,,,,5,,5,,,30
 eq0048,Cv.2 力體戒指,1500,ring,,all,ring.png,#99FF99,15,,,,,,,,,,,,,,,4,4,,,,
@@ -52,7 +52,7 @@ eq0050,Cv.2 敏幸戒指,1500,ring,,all,ring.png,#99FF99,15,,,,,,,,,,,,,,,,,,,4,
 eq0051,Cv.2 生靈耳環,1500,earrings,,all,earrings.png,#99FF99,15,,,,,,,,,20,0.5,20,0.1,,,,,,,,
 eq0052,預見Ａ 長劍,500,physical_weapon,one_hand_weapon,warrior|thief,sword.png,#99FF99,5,7,,,,,,,,,,,,,,2,,,,,
 eq0053,預見Ａ 法杖,500,magic_weapon,two_hand_weapon,mage|priest,wand.png,#99FF99,5,,7,,,,,,,,10,10,,,,,,,2,,
-eq0054,預見Ａ 拳套,500,physical_weapon,martial_weapon,martial,knuckles.png,#99FF99,5,7,,,,,,,,,,,,7,,1,1,,,,
+eq0054,預見Ａ 拳套,500,physical_weapon,martial_weapon,martial,knuckles.png,#99FF99,5,7,,,,,,,,,,,,5,,1,1,,,,
 eq0055,預見Ａ 魔法球,500,magic_weapon,two_hand_weapon,mage,magicball.png,#99FF99,5,,7,1,,,,,,,,,,,,,,2,0,,
 eq0056,預見Ａ 匕首,500,physical_weapon,one_hand_weapon,thief,knife.png,#99FF99,5,7,,2,20,,,,,,,,,,,,,,,1,1
 eq0057,預見Ｂ 長劍,1500,physical_weapon,one_hand_weapon,warrior|thief,sword.png,#99FF99,15,20,,,,,,,,,,,,,,3,,,,,1
@@ -68,10 +68,10 @@ eq0066,Ｂ 長靴,2000,shoe,,all,shoe.png,#A0A0A0,20,,,,,10,10,,,,,,,,,,,,,,
 eq0067,Ｂ 護膝,2000,kneepads,,all,kneepads.png,#A0A0A0,20,,,,,,,6,6,,,,,,,,,,,,
 eq0068,Ｂ 戒指,2000,ring,,all,ring.png,#A0A0A0,20,,,,,3,3,,,,,,,,,,,,,,
 eq0069,Ｂ 耳環,2000,earrings,,all,earrings.png,#A0A0A0,20,,,,,,,,,30,,30,,,,,,,,,
-eq0070,Ｂ 項鍊,2000,necklace,,all,necklace.png,#A0A0A0,20,,,,,,,,,,,,,9,9,,,,,,
+eq0070,Ｂ 項鍊,2000,necklace,,all,necklace.png,#A0A0A0,20,,,,,,,,,,,,,3,3,,,,,,
 eq0071,Ｂ 長劍,2000,physical_weapon,one_hand_weapon,warrior|thief,sword.png,#A0A0A0,20,25,,,,,,,,,,,,,,7,,,,,3
 eq0072,Ｂ 法杖,2000,magic_weapon,two_hand_weapon,mage|priest,wand.png,#A0A0A0,20,,25,,,,,,,30,,30,,,,,,3,7,,
-eq0073,Ｂ 拳套,2000,physical_weapon,martial_weapon,martial,knuckles.png,#A0A0A0,20,25,,,,,,,,,,,,12,,5,5,,,,
+eq0073,Ｂ 拳套,2000,physical_weapon,martial_weapon,martial,knuckles.png,#A0A0A0,20,25,,,,,,,,,,,,7,,5,5,,,,
 eq0074,Ｂ 魔法球,2000,magic_weapon,two_hand_weapon,mage,magicball.png,#A0A0A0,20,,25,3,,,,,,,,,,,,,,7,3,,
 eq0075,Ｂ 匕首,2000,physical_weapon,one_hand_weapon,thief,knife.png,#A0A0A0,20,25,,3,30,,,,,,,,,,,,,,,5,5
 eq0076,Lv.3 力量戒指,2500,ring,,all,ring.png,#A0A0A0,25,,,,,3,3,,,,,,,,,6,,,,,
@@ -86,11 +86,11 @@ eq0084,Cv.3 敏幸戒指,2500,ring,,all,ring.png,#99FF99,25,,,,,,,,,,,,,,,,,,,6,
 eq0085,Cv.3 生靈耳環,2500,earrings,,all,earrings.png,#99FF99,25,,,,,,,,,20,0.5,20,0.1,,,,,,,,
 eq0086,預見Ｃ 長劍,2500,physical_weapon,one_hand_weapon,warrior|thief,sword.png,#99FF99,25,30,,,,,,,,,,,,,,7,,,,,3
 eq0087,預見Ｃ 法杖,2500,magic_weapon,two_hand_weapon,mage|priest,wand.png,#99FF99,25,,30,,,,,,,,10,10,,,,,,3,7,,
-eq0088,預見Ｃ 拳套,2500,physical_weapon,martial_weapon,martial,knuckles.png,#99FF99,25,30,,,,,,,,,,,,7,,5,5,,,,
+eq0088,預見Ｃ 拳套,2500,physical_weapon,martial_weapon,martial,knuckles.png,#99FF99,25,30,,,,,,,,,,,,9,,5,5,,,,
 eq0089,預見Ｃ 魔法球,2500,magic_weapon,two_hand_weapon,mage,magicball.png,#99FF99,25,,30,3,,,,,,,,,,,,,,7,3,,
 eq0090,預見Ｃ 匕首,2500,physical_weapon,one_hand_weapon,thief,knife.png,#99FF99,25,30,,3,30,,,,,,,,,,,,,,,5,5
-eq0091,魯米娜斯 信仰,2500,idol,,all,idol.png,#FF00FF,25,12,12,5,80,,,,,,,,,20,20,,,,,,
-eq0092,骷髏王 紫金骷髏,3000,magic_weapon,two_hand_weapon,priest,wand.png,#FF00FF,30,,20,5,,,,,,,,50,,,10,,,15,5,5,5
+eq0091,魯米娜斯 信仰,2500,idol,,all,idol.png,#FF00FF,25,12,12,5,80,,,,,,,,,5,5,,,,,,
+eq0092,骷髏王 紫金骷髏,3000,magic_weapon,two_hand_weapon,priest,wand.png,#FF00FF,30,,20,5,,,,,,,,50,,,,,,15,5,5,5
 eq0093,巫妖王 影之哀傷,3000,physical_weapon,one_hand_weapon,warrior|thief,sword.png,#FF00FF,30,20,,5,50,,,,,,,,,,,15,5,,,5,5
 eq0094,殭屍王 屍鬼封禁,3000,body,,all,body.png,#FF00FF,30,,,,,30,30,,,50,20,50,5,,,2,10,2,10,3,3
 eq0095,玷污的 靈魂核心,2500,core,,all,core.png,#FF00FF,25,,,,,-5,-5,,,10,,10,,,,5,,5,,,30
