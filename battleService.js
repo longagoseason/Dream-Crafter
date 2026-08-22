@@ -36,6 +36,11 @@
   }
 
   function rollAttackAvoidance(attacker, target, damageType, random = Math.random, maximumDodgeChance = 95) {
+    if (damageType === "hybrid") {
+      const dodgeChance = clamp((combatStat(target, "AAR") + combatStat(target, "SAR")) / 2, 0, 95);
+      if (random() * 100 < dodgeChance) return { dodged: true, reason: "Hybrid 閃避", dodgeChance };
+      return { dodged: false, dodgeChance };
+    }
     const dodgeKey = damageType === "magic" ? "SAR" : "AAR";
     const configuredMaximum = Number(maximumDodgeChance);
     const dodgeMaximum = Number.isFinite(configuredMaximum) ? clamp(configuredMaximum, 0, 100) : 95;
@@ -55,6 +60,28 @@
   }
 
   function calculateAttackDamage(attacker, target, damageType, baseDamage = 0, skillMultiplier = 1, random = Math.random, armorRate = 2) {
+    if (damageType === "hybrid") {
+      const atk = Math.max(0, combatStat(attacker, "ATK"));
+      const matk = Math.max(0, combatStat(attacker, "MATK"));
+      const minimum = atk * .6 + matk * .6 + Number(baseDamage || 0);
+      const maximum = atk * .8 + matk * .8 + Number(baseDamage || 0)
+        + Math.max(0, combatStat(attacker, "STR")) * .7
+        + Math.max(0, combatStat(attacker, "INT")) * .7;
+      const roll = rollLuckyRange(minimum, maximum, combatStat(attacker, "LUK"), random);
+      const critical = rollCritical(attacker, random);
+      const hybridBonus = (combatStat(attacker, "ADAM") + combatStat(attacker, "MDAM")) * .7;
+      const rawDamage = roll.value * skillMultiplier * critical.multiplier * Math.max(0, 1 + hybridBonus / 100);
+      const ac = combatStat(target, "AC");
+      const mr = combatStat(target, "MR");
+      const defenseForProc = (ac + mr) / 2;
+      const level = Math.max(1, Number(attacker.level) || 1);
+      const halfChance = clamp(defenseForProc / (level * 5) * .5, 0, .5);
+      const afterProc = random() < halfChance ? rawDamage * .5 : rawDamage;
+      const divisor = Number(armorRate);
+      const safeArmorRate = Number.isFinite(divisor) && divisor > 0 ? divisor : 2;
+      const damage = round(Math.max(1, afterProc - (ac + mr) / safeArmorRate));
+      return { damage, roll, critical, rawDamage, hybridBonus, halfChance };
+    }
     const isMagic = damageType === "magic";
     const base = Math.max(0, combatStat(attacker, isMagic ? "MATK" : "ATK"));
     const attribute = Math.max(0, combatStat(attacker, isMagic ? "INT" : "STR"));

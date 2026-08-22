@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dreamer · 三人隊伍放置 RPG</title>
   <link rel="icon" type="image/png" href="./assets/images/Dreamer_logo.png">
-  <link rel="stylesheet" href="./style.css?v=20260818-slot-click">
+  <link rel="stylesheet" href="./style.css?v=20260822-hybrid-reward">
 </head>
 <body>
   <main class="game-layout">
     <section class="left-column">
       <article class="box party-box">
-        <div class="box-title team-title"><span id="team-name">隊伍</span><button id="welcome-button" type="button" aria-label="開啟歡迎訊息" title="歡迎訊息">？</button></div>
+        <div class="box-title team-title"><span id="team-name">隊伍</span><span class="team-title-actions"><button id="reward-button" type="button" aria-label="開啟獎勵" title="獎勵">R</button><button id="welcome-button" type="button" aria-label="開啟歡迎訊息" title="歡迎訊息">？</button></span></div>
         <div id="party" class="party"></div>
       </article>
 
@@ -110,6 +110,14 @@
   <dialog id="welcome-dialog" class="welcome-dialog">
     <div class="dialog-title"><strong id="welcome-dialog-title">歡迎訊息</strong><span class="welcome-dialog-actions"><button id="welcome-view-toggle" type="button">Patch Note</button><button id="welcome-close" type="button" aria-label="關閉">×</button></span></div>
     <div id="welcome-lines" class="welcome-lines"></div>
+  </dialog>
+  <dialog id="reward-dialog" class="welcome-dialog reward-dialog">
+    <div class="dialog-title"><strong>Reward 獎勵</strong><button id="reward-close" type="button" aria-label="關閉">×</button></div>
+    <div class="reward-content">
+      <p id="reward-adventure-time" class="reward-adventure-time"></p>
+      <div id="reward-groups" class="reward-groups"></div>
+      <p id="reward-message" class="reward-message" aria-live="polite"></p>
+    </div>
   </dialog>
   <template id="unit-template">
     <article class="unit-card">
@@ -268,10 +276,10 @@
     </div>
   </dialog>
   <div id="equipment-tooltip" class="equipment-tooltip" role="tooltip" hidden></div>
-  <script src="./battleService.js?v=20260818-armor-rate"></script>
+  <script src="./battleService.js?v=20260822-hybrid"></script>
   <script src="./csvLoader.js?v=20260817-status-effects"></script>
   <script src="./runtimePlatform.js?v=20260811-csv-no-store"></script>
   <script src="./saveManager.js?v=20260812-save-slots"></script>
-  <script src="./game.js?v=20260818-armor-rate-slot-click"></script>
+  <script src="./game.js?v=20260822-trigger-condition"></script>
 </body>
 </html>

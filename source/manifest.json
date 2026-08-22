@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-18T23:25:16.404Z",
+  "generatedAt": "2026-08-22T05:07:42.180Z",
   "numberFields": [
     "AAR",
     "AC",
@@ -143,7 +143,8 @@
         "town_recover",
         "Death_EXP_Penalty",
         "mid_fig_size",
-        "AAR_SAR_max"
+        "AAR_SAR_max",
+        "armor_rate"
       ],
       "id": []
     },
@@ -432,6 +433,27 @@
         "patch_note"
       ],
       "id": []
+    },
+    {
+      "file": "Reward - Reward.csv",
+      "logicalFile": "Reward.csv",
+      "table": "rewards",
+      "required": [
+        "reward_id",
+        "date",
+        "type"
+      ],
+      "expectedHeaders": [
+        "reward_id",
+        "date",
+        "type",
+        "id",
+        "value",
+        "intro"
+      ],
+      "id": [
+        "reward_id"
+      ]
     },
     {
       "file": "Welcome_news - Welcome_news.csv",

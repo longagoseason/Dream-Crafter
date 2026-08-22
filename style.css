@@ -139,12 +139,27 @@ button:not(:disabled) { cursor:pointer; } button:not(:disabled):hover { backgrou
 .recovery-dialog { width:min(980px,calc(100vw - 32px)); }
 .team-name-setting { display:grid; grid-template-columns:auto minmax(180px,1fr) auto; align-items:center; gap:10px; padding:12px 14px; color:var(--color-mid-recover-name); font-size:13px; font-weight:700; border-bottom:1px solid var(--line); }
 .team-title { display:flex; align-items:center; justify-content:space-between; }
-#welcome-button { width:26px; height:26px; padding:0; border:1px solid var(--line); border-radius:50%; font-weight:700; line-height:1; }
+.team-title-actions { display:flex; align-items:center; gap:6px; }
+#welcome-button,#reward-button { width:26px; height:26px; padding:0; border:1px solid var(--line); border-radius:50%; font-weight:700; line-height:1; }
+#reward-button.has-unclaimed { background:var(--color-reward-not-get); color:#fff; }
 .welcome-dialog { width:min(900px,calc(100vw - 40px)); max-height:calc(100vh - 48px); padding:0; color:var(--ink); background:#111; border:1px solid var(--line); }
 .welcome-lines { display:flex; flex-direction:column; align-items:stretch; gap:10px; max-height:calc(100vh - 130px); overflow:auto; padding:24px 30px 28px; }
 .welcome-lines p { margin:0; text-align:center; line-height:1.45; overflow-wrap:anywhere; }
 .welcome-dialog-actions { display:flex; align-items:center; gap:1em; }
 .welcome-dialog-actions button { width:auto; min-width:max-content; min-height:28px; white-space:nowrap; }
+.reward-dialog { width:min(900px,calc(100vw - 40px)); }
+.reward-content { padding:16px; }
+.reward-adventure-time { margin:0 0 12px; color:var(--muted); font-weight:700; }
+.reward-groups { display:grid; gap:8px; max-height:min(65vh,620px); overflow:auto; }
+.reward-group { border:1px solid var(--line); background:#171717; }
+.reward-group summary { cursor:pointer; padding:10px 12px; font-weight:700; }
+.reward-group-body { display:grid; gap:6px; padding:0 10px 10px; }
+.reward-murmur { margin:0; color:var(--muted); white-space:pre-wrap; }
+.reward-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(5em,max-content); gap:10px; align-items:center; padding:8px 10px; background:#222; }
+.reward-row span { min-width:0; overflow-wrap:anywhere; }
+.reward-row button { min-width:5em; white-space:nowrap; }
+.reward-message { min-height:20px; margin:10px 0 0; color:#00ffff; }
+.reward-message.error { color:#ff5555; }
 #welcome-view-toggle { padding-inline:12px; font-size:13px; }
 #welcome-close { flex:0 0 48px; width:48px; }
 .patch-note-series { display:flex; justify-content:center; gap:8px; flex-wrap:wrap; padding-bottom:12px; border-bottom:1px solid var(--line); }

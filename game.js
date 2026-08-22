@@ -32,6 +32,7 @@ const state = {
   savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(), welcomeView: "welcome", patchNoteSeries: null,
   mapMenuOpenGroups: new Set(), warehouseMode: "big", bigStorage: [], bigStoragePage: 0, bigStoragePageCapacity: 30, bigStorageColumns: 5, bigStorageRows: 6,
   collections: [], collectionPage: 0, collectionInventoryPage: 0, collectionInventoryCapacity: 30, collectionStoragePage: 0, collectionStorageCapacity: 30,
+  adventureStartedAt: null, claimedRewards: new Set(),
 };
 const equipmentTooltipModels = new WeakMap();
 const enhancementFlashKeyframes = new Set();
@@ -100,6 +101,7 @@ async function init() {
     setupRecoveryPanel();
     setupSaveManagerPanel();
     setupWelcomePanel();
+    setupRewardPanel();
     setupRightPanel();
     setupShop();
     setupWarehouse();
@@ -149,6 +151,8 @@ function exportPlayerSave() {
       name: collection.name,
       equipment: Object.fromEntries(Object.entries(collection.equipment ?? {}).map(([slot, equipped]) => [slot, serializeEquipmentInstance(equipped)])),
     })),
+    adventure_started_at: state.adventureStartedAt,
+    claimed_rewards: [...state.claimedRewards],
     currentMapId: state.map?.map_id ?? null,
     paused: Boolean(state.paused),
     townAutoReturn: state.map?.map_id === "town001" && state.townAutoReturn,
@@ -217,6 +221,9 @@ function applyPlayerSave(saved) {
   normalizeInventoryIndices();
   state.bigStorage = normalizePortableEntries(saved.bigStorage ?? saved.warehouse ?? [], BIG_STORAGE_MAX_SLOTS, "storageIndex");
   state.collections = normalizeCollections(saved.collections ?? saved.collectionStorage ?? []);
+  const legacyAdventureTime = saved.adventure_started_at ?? saved.savedAt;
+  state.adventureStartedAt = validAdventureTimestamp(legacyAdventureTime) ? new Date(legacyAdventureTime).toISOString() : new Date().toISOString();
+  state.claimedRewards = new Set((Array.isArray(saved.claimed_rewards) ? saved.claimed_rewards : []).map((value) => String(value)).filter(Boolean));
   state.autoSellItemIds = new Set((saved.autoSellItemIds ?? []).filter((itemId) => catalogItem(itemId)));
   ensureUniqueEquipmentUuids();
   state.savedMapId = saved.currentMapId ?? null;
@@ -259,6 +266,7 @@ function forceSafeTown() {
 function resetRuntimeFromSave(saved) {
   state.enemies = []; state.inventory = []; state.bigStorage = []; state.collections = []; state.gold = 0; state.drops = []; state.autoSellItemIds = new Set();
   state.elapsed = 0; state.spawnElapsed = 0; state.savedMapId = null; state.previousMapId = null; state.townAutoReturn = false;
+  state.adventureStartedAt = null; state.claimedRewards = new Set();
   buildParty();
   const loaded = applyPlayerSave(saved);
   if (!loaded) { initializeStorageState(); grantInitialItems(); }
@@ -294,7 +302,7 @@ async function runSaveTransition(operation) {
 function validateGameData(data) {
   const requiredTables = [
     "classes", "equipment", "item", "characterAttribute", "attributeIndex", "characterSkills", "monsters", "monsterSkills", "skill",
-    "map", "mapSpawn", "lootDrops", "specialLoot", "playerLevel", "dreamerSystem", "gameColorIndex", "enhanceLevel", "enhanceSaveEnchant", "enhanceOverEnchant", "enhanceChaosEnchant", "welcomeNews", "patchNotes",
+    "map", "mapSpawn", "lootDrops", "specialLoot", "playerLevel", "dreamerSystem", "gameColorIndex", "enhanceLevel", "enhanceSaveEnchant", "enhanceOverEnchant", "enhanceChaosEnchant", "welcomeNews", "patchNotes", "rewards",
   ];
   const missing = requiredTables.filter((key) => !Array.isArray(data?.[key]));
   if (missing.length) throw new Error(`資料版本不相容，缺少資料表：${missing.join("、")}`);
@@ -336,6 +344,171 @@ function playerSkillLogColor(skill) {
 
 function systemSettings() {
   return state.data.dreamerSystem[0];
+}
+
+function validAdventureTimestamp(value) {
+  return Boolean(value) && Number.isFinite(new Date(value).getTime());
+}
+
+function localDateKey(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+}
+
+function validRewardDate(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d{8}$/.test(text)) return false;
+  const year = Number(text.slice(0, 4));
+  const month = Number(text.slice(4, 6));
+  const day = Number(text.slice(6, 8));
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+function formatRewardDate(value) {
+  const text = String(value ?? "");
+  return `${text.slice(0, 4)}/${text.slice(4, 6)}/${text.slice(6, 8)}`;
+}
+
+function rewardEligibility(row) {
+  const adventureDate = localDateKey(state.adventureStartedAt);
+  return Boolean(adventureDate && validRewardDate(row?.date) && adventureDate >= String(row.date));
+}
+
+function rewardValidation(row, logError = false) {
+  const type = String(row?.type ?? "").trim();
+  const rewardId = String(row?.reward_id ?? "").trim();
+  const value = Number(row?.value);
+  let error = "";
+  let name = "";
+  if (!rewardId) error = "缺少 reward_id";
+  else if (!validRewardDate(row?.date)) error = `日期格式錯誤：${row?.date ?? "空白"}`;
+  else if (type === "murmur") {
+    if (!String(row.intro ?? "").trim()) error = "murmur 缺少 intro";
+  } else if (!Number.isInteger(value) || value <= 0) error = "value 必須是大於 0 的整數";
+  else if (type === "equipment") {
+    const item = state.data.equipment.find((candidate) => candidate.item_id === row.id);
+    if (!item) error = `equipment.csv 找不到 id=${row.id || "空白"}`;
+    else name = item.item_name;
+  } else if (type === "item") {
+    const item = state.data.item.find((candidate) => candidate.item_id === row.id);
+    if (!item) error = `item.csv 找不到 id=${row.id || "空白"}`;
+    else name = item.item_name;
+  } else if (type === "gold") name = "金幣";
+  else error = `不支援的 type=${type || "空白"}`;
+  if (error && logError) {
+    const warningKey = `reward:${rewardId || "empty"}:${error}`;
+    if (!runtimeWarningKeys.has(warningKey)) {
+      runtimeWarningKeys.add(warningKey);
+      console.error(`Reward error: reward_id=${rewardId || "(empty)"}, type=${type || "(empty)"}, id=${row?.id || "(empty)"}: ${error}`);
+    }
+  }
+  return { valid: !error, error, type, rewardId, value, name };
+}
+
+function hasUnclaimedReward() {
+  return (state.data?.rewards ?? []).some((row) => {
+    const result = rewardValidation(row);
+    return result.type !== "murmur" && result.valid && rewardEligibility(row) && !state.claimedRewards.has(result.rewardId);
+  });
+}
+
+function renderRewardButton() {
+  const button = $("#reward-button");
+  if (!button) return;
+  const highlighted = hasUnclaimedReward();
+  button.classList.toggle("has-unclaimed", highlighted);
+  if (highlighted) button.style.backgroundColor = indexedColor("Reward_not_get", "#FF0000");
+  else button.style.removeProperty("background-color");
+}
+
+function rewardDisplayName(row, validation = rewardValidation(row)) {
+  const quantity = Number(row.value).toLocaleString("en-US");
+  return validation.type === "gold" ? `金幣 x ${quantity}` : `${validation.name || row.id || "資料錯誤"} x ${quantity}`;
+}
+
+function renderRewardPanel() {
+  const adventure = $("#reward-adventure-time");
+  const container = $("#reward-groups");
+  if (!adventure || !container) return;
+  adventure.textContent = state.adventureStartedAt
+    ? `開始冒險於 ${new Date(state.adventureStartedAt).toLocaleString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}`
+    : "尚未建立冒險時間";
+  container.replaceChildren();
+  const eligibleRows = (state.data.rewards ?? []).map((row, sourceIndex) => ({ row, sourceIndex })).filter(({ row }) => rewardEligibility(row));
+  const dates = [...new Set(eligibleRows.map(({ row }) => String(row.date)))].sort((a, b) => b.localeCompare(a));
+  for (const [dateIndex, date] of dates.entries()) {
+    const rows = eligibleRows.filter(({ row }) => String(row.date) === date).sort((a, b) => a.sourceIndex - b.sourceIndex);
+    const murmurs = rows.filter(({ row }) => String(row.type).trim() === "murmur").map(({ row }) => String(row.intro ?? "").trim()).filter(Boolean);
+    const details = document.createElement("details"); details.className = "reward-group"; details.open = dateIndex === 0;
+    const summary = document.createElement("summary"); summary.textContent = `${formatRewardDate(date)}${murmurs.length ? `  ${murmurs.join("／")}` : ""}`;
+    const body = document.createElement("div"); body.className = "reward-group-body";
+    for (const murmur of murmurs) { const p = document.createElement("p"); p.className = "reward-murmur"; p.textContent = murmur; body.append(p); }
+    for (const { row } of rows.filter(({ row }) => String(row.type).trim() !== "murmur")) {
+      const validation = rewardValidation(row, true);
+      const line = document.createElement("div"); line.className = "reward-row";
+      const label = document.createElement("span"); label.textContent = validation.valid ? rewardDisplayName(row, validation) : `資料錯誤：${row.reward_id}`;
+      const button = document.createElement("button"); button.type = "button"; button.dataset.rewardId = String(row.reward_id ?? "");
+      const claimed = state.claimedRewards.has(validation.rewardId);
+      button.textContent = claimed ? "已領取" : validation.valid ? "領取" : "無法領取";
+      button.disabled = claimed || !validation.valid;
+      if (!validation.valid) button.title = validation.error;
+      line.append(label, button); body.append(line);
+    }
+    details.append(summary, body); container.append(details);
+  }
+  if (!dates.length) { const empty = document.createElement("p"); empty.className = "reward-murmur"; empty.textContent = "目前沒有符合開始冒險日期的獎勵。"; container.append(empty); }
+}
+
+function rewardHasInventoryCapacity(validation) {
+  const freeSlots = Math.max(0, INVENTORY_MAX_SLOTS - state.inventory.length);
+  if (validation.type === "equipment") return freeSlots >= validation.value;
+  if (validation.type === "item") return state.inventory.some((entry) => !entry.isEquipment && entry.itemId === validation.rowId) || freeSlots >= 1;
+  return true;
+}
+
+async function claimReward(rewardId) {
+  const row = state.data.rewards.find((candidate) => String(candidate.reward_id) === String(rewardId));
+  const validation = rewardValidation(row, true);
+  if (!row || !validation.valid || validation.type === "murmur" || !rewardEligibility(row) || state.claimedRewards.has(validation.rewardId)) throw new Error(validation.error || "此獎勵目前不可領取");
+  validation.rowId = row.id;
+  if (!rewardHasInventoryCapacity(validation)) throw new Error("背包空間不足，獎勵未發放。");
+  const inventoryBefore = JSON.parse(JSON.stringify(state.inventory));
+  const goldBefore = state.gold;
+  const claimedBefore = new Set(state.claimedRewards);
+  try {
+    if (validation.type === "equipment" || validation.type === "item") {
+      const result = addInventoryItem(row.id, validation.name, validation.value);
+      if (result.full || result.quantity !== validation.value) throw new Error("背包無法完整容納獎勵");
+    } else if (validation.type === "gold") state.gold += validation.value;
+    state.claimedRewards.add(validation.rewardId);
+    if (state.savePromise) await state.savePromise;
+    await persistPlayerSave(false, true);
+  } catch (error) {
+    state.inventory = inventoryBefore;
+    state.gold = goldBefore;
+    state.claimedRewards = claimedBefore;
+    throw error;
+  }
+  render();
+  renderRewardPanel();
+}
+
+function setupRewardPanel() {
+  const dialog = $("#reward-dialog");
+  $("#reward-button").addEventListener("click", () => { renderRewardPanel(); $("#reward-message").textContent = ""; dialog.showModal(); });
+  $("#reward-close").addEventListener("click", () => dialog.close());
+  $("#reward-groups").addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-reward-id]");
+    if (!button) return;
+    const message = $("#reward-message");
+    button.disabled = true;
+    try { await claimReward(button.dataset.rewardId); message.textContent = "獎勵已完整領取並儲存。"; message.classList.remove("error"); }
+    catch (error) { message.textContent = error.message; message.classList.add("error"); renderRewardPanel(); }
+  });
+  renderRewardButton();
 }
 
 function midFigureSizePercent() {
@@ -945,7 +1118,12 @@ function itemTooltip(item) {
   const lines = [item.item_name];
   const effectNames = { HPrecover: "生命恢復", MPrecover: "魔力恢復" };
   if (effectNames[item.effect]) lines.push(`${effectNames[item.effect]} ${item.effect_value_min}~${item.effect_value_max}`);
-  else if (item.effect === "learn_skill") lines.push(`技能書 ${item.skill_id}`);
+  else if (item.effect === "learn_skill") {
+    const className = state.data.classes.find((row) => row.class_id === item.target)?.class_name ?? item.target ?? "未知職業";
+    const level = state.data.characterSkills.find((row) => row.skill_id === item.skill_id)?.level;
+    lines[0] = `${item.item_name} | Lv. ${Number.isFinite(Number(level)) ? Number(level) : "?"}`;
+    lines.push(`${className} 技能書`);
+  }
   else if (item.effect) lines.push(`效果 ${item.effect}`);
   if (item.cooldown !== null && item.cooldown !== undefined) lines.push(`冷卻時間 ${item.cooldown} 秒`);
   return lines.join("\n");
@@ -1511,6 +1689,8 @@ async function startNewGameInSlot(slotId) {
   await runSaveTransition(async () => {
     if (state.currentSlot) await persistPlayerSave(false, true);
     resetRuntimeFromSave(null);
+    state.adventureStartedAt = new Date().toISOString();
+    state.claimedRewards = new Set();
     await DreamerSaveManager.setActiveSlot(slotId);
     state.currentSlot = slotId;
     try { await persistPlayerSave(false, true); }
@@ -1598,6 +1778,7 @@ function setupSaveManagerPanel() {
       await runSaveTransition(async () => {
         if (state.currentSlot) await persistPlayerSave(false, true);
         const working = await DreamerSaveManager.importToImported(imported);
+        working.adventure_started_at = new Date().toISOString();
         await DreamerSaveManager.setActiveSlot("imported");
         state.currentSlot = "imported";
         resetRuntimeFromSave(working);
@@ -1878,6 +2059,12 @@ function enhancementStoneEntries(type = null) {
       && ["Bless_Enhance", "Curse_Enhance", "Chaos_Enhance", "Return_Enhance"].includes(item.effect)
       && (!type || item.effect === effectForType[type])
       && entry.quantity > 0;
+  }).sort((left, right) => {
+    const leftItem = state.data.item.find((candidate) => candidate.item_id === left.itemId);
+    const rightItem = state.data.item.find((candidate) => candidate.item_id === right.itemId);
+    const leftNumber = String(leftItem?.item_num ?? leftItem?.item_id ?? "");
+    const rightNumber = String(rightItem?.item_num ?? rightItem?.item_id ?? "");
+    return leftNumber.localeCompare(rightNumber, undefined, { numeric: true, sensitivity: "base" });
   });
 }
 
@@ -2452,12 +2639,32 @@ function learnSkill(hero, skillId) {
 
 function ensureSkillSetting(hero, skill) {
   const current = hero.skillSettings[skill.skill_id] ?? (hero.skillSettings[skill.skill_id] = {});
+  const legacyTriggerValue = current.triggerValue;
   const defaultTrigger = skill.damage_type === "heal" ? 30 : (skill.trigger_value ?? 100);
-  current.triggerValue = clamp(Number(current.triggerValue ?? defaultTrigger), 1, 100);
-  current.minTargets = Math.max(1, Math.trunc(Number(current.minTargets ?? skill.min_targets ?? 1)));
+  current.triggerValue = normalizedTriggerPercentage(current.triggerValue, defaultTrigger);
+  current.triggerHpValue = normalizedTriggerPercentage(current.triggerHpValue, legacyTriggerValue ?? skill.trigger_value ?? 50);
+  current.triggerMpValue = normalizedTriggerPercentage(current.triggerMpValue, legacyTriggerValue ?? skill.trigger_value ?? 50);
+  current.minTargets = clamp(Math.trunc(Number(current.minTargets ?? skill.min_targets ?? 1) || 1), 1, 3);
   current.mpThreshold = Math.max(0, Number(current.mpThreshold) || 0);
   current.enemyCountThreshold = clamp(Math.trunc(Number(current.enemyCountThreshold ?? 1) || 1), 1, 3);
   return current;
+}
+
+function normalizedTriggerPercentage(value, fallback) {
+  const parsed = Number(value);
+  const fallbackParsed = Number(fallback);
+  return clamp(Number.isFinite(parsed) ? parsed : (Number.isFinite(fallbackParsed) ? fallbackParsed : 50), 0, 100);
+}
+
+const PLAYER_TRIGGER_PATTERN = /^(ally|enemy)_(hp|mp)_(below|above)$/i;
+const SELF_DUAL_TRIGGER_PATTERN = /^self_hp_(below|above)_mp_(below|above)$/i;
+
+function effectivePlayerTriggerType(skill) {
+  return String(skill.trigger_type ?? (skill.damage_type === "heal" ? "ally_hp_below" : "")).trim().toLowerCase();
+}
+
+function triggerComparisonMatches(ratio, comparison, threshold) {
+  return comparison === "above" ? ratio >= threshold : ratio <= threshold;
 }
 
 function renderSkillPanel() {
@@ -2521,24 +2728,42 @@ function createSkillRow(skill, learned, enabled, hero = null) {
     });
     countLabel.append(countInput, "人"); controls.append(separator, countLabel); mainline.append(controls);
   }
-  if (hero && (skill.damage_type === "heal" || ["ally_hp_below", "ally_mp_below"].includes(skill.trigger_type))) {
+  const playerTriggerType = effectivePlayerTriggerType(skill);
+  const standardTrigger = playerTriggerType.match(PLAYER_TRIGGER_PATTERN);
+  const selfDualTrigger = playerTriggerType.match(SELF_DUAL_TRIGGER_PATTERN);
+  if (hero && standardTrigger) {
     const setting = ensureSkillSetting(hero, skill);
-    const resource = skill.trigger_type === "ally_mp_below" ? "MP" : "HP";
+    const [, relation, resourceText, comparison] = standardTrigger;
+    const resource = resourceText.toUpperCase();
+    const relationLabel = relation === "enemy" ? "敵方" : "我方";
+    const comparisonLabel = comparison === "above" ? "≥" : "≤";
     const controls = document.createElement("span"); controls.className = `skill-trigger-controls ${resource === "MP" ? "skill-mp-trigger-controls" : "skill-hp-controls"}`;
     const separator = document.createElement("span"); separator.className = "skill-separator"; separator.textContent = "|";
     controls.append(separator);
-    const hpLabel = document.createElement("label"); hpLabel.textContent = `${resource}≤`;
-    const hpInput = document.createElement("input"); hpInput.type = "number"; hpInput.min = "1"; hpInput.max = "100"; hpInput.step = "1"; hpInput.value = setting.triggerValue;
+    const hpLabel = document.createElement("label"); hpLabel.textContent = `${relationLabel}${resource}${comparisonLabel}`;
+    const hpInput = document.createElement("input"); hpInput.type = "number"; hpInput.min = "0"; hpInput.max = "100"; hpInput.step = "1"; hpInput.value = setting.triggerValue;
     hpInput.setAttribute("aria-label", `${skill.name} ${resource} 觸發百分比`);
-    hpInput.addEventListener("change", () => { setting.triggerValue = clamp(Number(hpInput.value) || (skill.damage_type === "heal" ? 30 : 100), 1, 100); hpInput.value = setting.triggerValue; persistPlayerSave(); });
+    hpInput.addEventListener("change", () => { setting.triggerValue = normalizedTriggerPercentage(hpInput.value, setting.triggerValue); hpInput.value = setting.triggerValue; persistPlayerSave(); });
     hpLabel.append(hpInput, "%"); controls.append(hpLabel);
-    if (skill.min_targets !== null && skill.min_targets !== undefined) {
-      const countSeparator = document.createElement("span"); countSeparator.className = "skill-separator"; countSeparator.textContent = "|";
-      const countLabel = document.createElement("label"); countLabel.textContent = "人數≥";
-      const countInput = document.createElement("input"); countInput.type = "number"; countInput.min = "1"; countInput.max = "3"; countInput.step = "1"; countInput.value = setting.minTargets;
-      countInput.setAttribute("aria-label", `${skill.name} 最少觸發人數`);
-      countInput.addEventListener("change", () => { setting.minTargets = clamp(Math.trunc(Number(countInput.value) || 1), 1, 3); countInput.value = setting.minTargets; persistPlayerSave(); });
-      countLabel.append(countInput); controls.append(countSeparator, countLabel);
+    const countSeparator = document.createElement("span"); countSeparator.className = "skill-separator"; countSeparator.textContent = "|";
+    const countLabel = document.createElement("label"); countLabel.textContent = "人數≥";
+    const countInput = document.createElement("input"); countInput.type = "number"; countInput.min = "1"; countInput.max = "3"; countInput.step = "1"; countInput.value = setting.minTargets;
+    countInput.setAttribute("aria-label", `${skill.name} 最少觸發人數`);
+    countInput.addEventListener("change", () => { setting.minTargets = clamp(Math.trunc(Number(countInput.value) || 1), 1, 3); countInput.value = setting.minTargets; persistPlayerSave(); });
+    countLabel.append(countInput); controls.append(countSeparator, countLabel);
+    mainline.append(controls);
+  } else if (hero && selfDualTrigger) {
+    const setting = ensureSkillSetting(hero, skill);
+    const [, hpComparison, mpComparison] = selfDualTrigger;
+    const controls = document.createElement("span"); controls.className = "skill-trigger-controls skill-self-trigger-controls";
+    const separator = document.createElement("span"); separator.className = "skill-separator"; separator.textContent = "|";
+    controls.append(separator);
+    for (const [resource, comparison, settingKey] of [["HP", hpComparison, "triggerHpValue"], ["MP", mpComparison, "triggerMpValue"]]) {
+      const label = document.createElement("label"); label.textContent = `自身${resource}${comparison === "above" ? "≥" : "≤"}`;
+      const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.max = "100"; input.step = "1"; input.value = setting[settingKey];
+      input.setAttribute("aria-label", `${skill.name} 自身 ${resource} 觸發百分比`);
+      input.addEventListener("change", () => { setting[settingKey] = normalizedTriggerPercentage(input.value, setting[settingKey]); input.value = setting[settingKey]; persistPlayerSave(); });
+      label.append(input, "%"); controls.append(label);
     }
     mainline.append(controls);
   }
@@ -3506,13 +3731,13 @@ function resourceRatio(unit, stat) {
 
 function monsterSkillTriggerSatisfied(use) {
   if (use.trigger_condition === "always") return true;
-  const match = String(use.trigger_condition ?? "").match(/^(ally|enemy)_(HP|MP)_below_(\d+(?:\.\d+)?)$/i);
+  const match = String(use.trigger_condition ?? "").match(/^(ally|enemy)_(HP|MP)_(below|above)_(\d+(?:\.\d+)?)$/i);
   if (!match) return false;
-  const [, side, stat, thresholdText] = match;
+  const [, side, stat, comparison, thresholdText] = match;
   const threshold = Number(thresholdText);
   return monsterTriggerTargets(side.toLowerCase()).some((target) => {
     const ratio = resourceRatio(target, stat.toUpperCase());
-    return ratio !== null && ratio < threshold;
+    return ratio !== null && triggerComparisonMatches(ratio, comparison.toLowerCase(), threshold);
   });
 }
 
@@ -3773,7 +3998,7 @@ function executeMonsterSkill(enemy, skill, skillColor) {
   const mainTargets = resolveSkillTargetSet(enemy, skill.damage_target, allies, opponents);
   let mainDamageTotal = 0;
   const mainDamageByTarget = new Map(mainTargets.map((target) => [target, 0]));
-  if (["physical", "magic"].includes(skill.damage_type)) {
+  if (["physical", "magic", "hybrid"].includes(skill.damage_type)) {
     for (const target of mainTargets) {
       const result = executeSkillDamageComponent(enemy, target, skill, { channel: "monster", skillColor, baseDamage: skill.base_damage });
       if (result.hit) {
@@ -3813,7 +4038,7 @@ function logAppliedSkillEffect(casterName, skill, effect, value, targets, skillC
 }
 
 function executeSkillDamageComponent(caster, target, skill, context = {}) {
-  if (!target || target.hp <= 0 || !["physical", "magic"].includes(skill.damage_type)) return { hit: false };
+  if (!target || target.hp <= 0 || !["physical", "magic", "hybrid"].includes(skill.damage_type)) return { hit: false };
   const avoidance = rollConfiguredAttackAvoidance(caster, target, skill.damage_type);
   if (avoidance.dodged) {
     addLog(`${caster.name} 的 ${skill.name} 被 ${target.name} ${avoidance.reason}。`, { channel: context.channel, skillName: skill.name, skillColor: context.skillColor });
@@ -4020,15 +4245,26 @@ function selectHeroSkill(actor) {
 function skillTriggerMet(actor, skill) {
   const setting = ensureSkillSetting(actor, skill);
   if (["aoe", "enemy_aoe", "ALLaoe"].includes(skill.damage_target) && state.enemies.filter((enemy) => enemy.hp > 0).length < setting.enemyCountThreshold) return false;
-  if (skill.damage_type === "heal" || ["ally_hp_below", "ally_mp_below"].includes(skill.trigger_type)) {
-    const resource = skill.trigger_type === "ally_mp_below" ? "MP" : "HP";
-    const count = livingParty().filter((hero) => {
-      const ratio = resourceRatio(hero, resource);
-      return ratio !== null && ratio <= setting.triggerValue;
+  const triggerType = effectivePlayerTriggerType(skill);
+  const selfDualTrigger = triggerType.match(SELF_DUAL_TRIGGER_PATTERN);
+  if (selfDualTrigger) {
+    const hpRatio = resourceRatio(actor, "HP");
+    const mpRatio = resourceRatio(actor, "MP");
+    if (hpRatio === null || mpRatio === null) return false;
+    return triggerComparisonMatches(hpRatio, selfDualTrigger[1], setting.triggerHpValue)
+      && triggerComparisonMatches(mpRatio, selfDualTrigger[2], setting.triggerMpValue);
+  }
+  const standardTrigger = triggerType.match(PLAYER_TRIGGER_PATTERN);
+  if (standardTrigger) {
+    const [, relation, resourceText, comparison] = standardTrigger;
+    const candidates = relation === "enemy" ? state.enemies.filter((enemy) => enemy.hp > 0) : livingParty();
+    const count = candidates.filter((unit) => {
+      const ratio = resourceRatio(unit, resourceText.toUpperCase());
+      return ratio !== null && triggerComparisonMatches(ratio, comparison, setting.triggerValue);
     }).length;
     return count >= setting.minTargets;
   }
-  return !skill.trigger_type;
+  return !triggerType;
 }
 
 function startHeroSkill(actor, skill) {
@@ -4043,7 +4279,7 @@ function startHeroSkill(actor, skill) {
 }
 
 function executeHeroSkill(actor, skill) {
-  if (["physical", "magic"].includes(skill.damage_type)) executeDamageSkill(actor, skill);
+  if (["physical", "magic", "hybrid"].includes(skill.damage_type)) executeDamageSkill(actor, skill);
   else if (skill.damage_type === "heal") executeHealSkill(actor, skill);
   else if (skill.damage_type === "buff") executeBuffSkill(actor, skill);
 }
@@ -4125,11 +4361,12 @@ function playerAttack(actor, enemy) {
 }
 
 function monsterAttack(enemy, target) {
-  const magic = enemy.attack_type === "magic";
-  const damageType = magic ? "magic" : "physical";
+  const damageType = enemy.attack_type === "magic" ? "magic" : enemy.attack_type === "hybrid" ? "hybrid" : "physical";
   const avoidance = rollConfiguredAttackAvoidance(enemy, target, damageType);
   if (avoidance.dodged) { addLog(`${enemy.name} 的攻擊被 ${target.name} ${avoidance.reason}。`, { channel: "monster" }); return; }
-  const basicSkill = state.data.skill.find((skill) => skill.skill_id === (magic ? "sk002" : "sk001"));
+  const basicSkill = damageType === "hybrid"
+    ? state.data.skill.find((skill) => skill.damage_type === "hybrid" && skill.name === "普通攻擊")
+    : state.data.skill.find((skill) => skill.skill_id === (damageType === "magic" ? "sk002" : "sk001"));
   const result = calculateAttackDamage(enemy, target, damageType, basicSkill?.base_damage ?? 0, basicSkill?.multiplier ? basicSkill.multiplier / 100 : 1, Math.random, configuredArmorRate());
   target.hp = round(target.hp - result.damage); addLog(`${enemy.name} 攻擊前排 ${target.name}，造成 ${result.damage} 傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
     { channel: "monster", critical: result.critical.isCritical, damage: result.damage });
@@ -4540,6 +4777,7 @@ function render() {
   $("#drop-log").innerHTML = state.drops.length ? state.drops.map((d) => `<li><strong>${d.text}</strong><br><small>${d.source}</small></li>`).join("") : '<li class="empty">尚無掉落</li>';
   renderInventory(); renderShop(); if (state.rightPage === "warehouse") renderWarehouse(); if ($("#collection-dialog")?.open) renderCollectionDialog();
   if ($("#status-dialog")?.open) renderStatusDialog();
+  renderRewardButton();
 }
 
 function statusEffectText(status) {

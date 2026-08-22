@@ -1,12 +1,12 @@
 Dream-Crafter GitHub Pages Build Report
-建立時間：2026-08-18T23:25:16.528Z
+建立時間：2026-08-22T05:07:42.285Z
 來源：build_github.bat 所在的專案根目錄（dreamer-game-data-v1-xlsx-rpg）
 
 【已複製／產生】
 HTML：index.html（1）
 JavaScript：battleService.js、csvLoader.js、runtimePlatform.js、saveManager.js、game.js（5）
 CSS：style.css（1）
-CSV：22 份（source/）
+CSV：23 份（source/）
 JSON：source/manifest.json（只列出本次啟動必須下載的 CSV；不保存 master data 快照）
 圖片：assets/images/Dreamer_logo.png、assets\slot-patterns\flask.png、assets\slot-patterns\enhance.png、assets\slot-patterns\skillbook.png、assets\slot-patterns\body.png、assets\slot-patterns\helmet.png、assets\slot-patterns\shield.png、assets\slot-patterns\gloves.png、assets\slot-patterns\shoe.png、assets\slot-patterns\kneepads.png、assets\slot-patterns\ring.png、assets\slot-patterns\earrings.png、assets\slot-patterns\necklace.png、assets\slot-patterns\sword.png、assets\slot-patterns\wand.png、assets\slot-patterns\knuckles.png、assets\slot-patterns\core.png、assets\slot-patterns\idol.png、assets\slot-patterns\magicball.png、assets\slot-patterns\knife.png（20）
 音效：0（目前沒有 runtime 引用）
