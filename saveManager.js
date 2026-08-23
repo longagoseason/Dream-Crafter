@@ -19,6 +19,8 @@
   let storageMode = null;
   let lastLoadedSave = null;
   let activeSlotId = null;
+  let validRewardIds = new Set();
+  let validRewardDates = new Set();
 
   function clone(value) { return value == null ? null : JSON.parse(JSON.stringify(value)); }
   function slotKey(slotId) {
@@ -32,10 +34,58 @@
     gameVersion = normalized;
     return gameVersion;
   }
+  function configureRewardCatalog(rewardIds = [], rewardDates = []) {
+    validRewardIds = new Set([...rewardIds].map((value) => String(value ?? "").trim()).filter(Boolean));
+    validRewardDates = new Set([...rewardDates].map((value) => String(value ?? "").trim()).filter(Boolean));
+    return { rewardIds: validRewardIds.size, rewardDates: validRewardDates.size };
+  }
+  function sanitizeRewardState(save) {
+    if (!save || typeof save !== "object" || Array.isArray(save)) return { save: clone(save), changed: false };
+    const cleaned = clone(save);
+    const claimed = [];
+    const seen = new Set();
+    for (const value of Array.isArray(cleaned.claimed_rewards) ? cleaned.claimed_rewards : []) {
+      const rewardId = String(value ?? "").trim();
+      if (!rewardId || !validRewardIds.has(rewardId) || seen.has(rewardId)) continue;
+      seen.add(rewardId);
+      claimed.push(rewardId);
+    }
+    const openState = {};
+    const sourceOpenState = cleaned.reward_group_open_state;
+    if (sourceOpenState && typeof sourceOpenState === "object" && !Array.isArray(sourceOpenState)) {
+      for (const [date, open] of Object.entries(sourceOpenState)) {
+        if (validRewardDates.has(String(date)) && typeof open === "boolean") openState[String(date)] = open;
+      }
+    }
+    const previousClaimed = Array.isArray(cleaned.claimed_rewards) ? cleaned.claimed_rewards : [];
+    const previousOpenState = sourceOpenState && typeof sourceOpenState === "object" && !Array.isArray(sourceOpenState) ? sourceOpenState : {};
+    cleaned.claimed_rewards = claimed;
+    cleaned.reward_group_open_state = openState;
+    const changed = JSON.stringify(previousClaimed) !== JSON.stringify(claimed)
+      || JSON.stringify(previousOpenState) !== JSON.stringify(openState)
+      || !Array.isArray(save.claimed_rewards)
+      || !save.reward_group_open_state || typeof save.reward_group_open_state !== "object" || Array.isArray(save.reward_group_open_state);
+    return { save: cleaned, changed };
+  }
+  async function sanitizeAllRewardState() {
+    const cleanedSlots = [];
+    for (const slotId of [...SLOT_IDS, IMPORTED_ID]) {
+      const key = slotKey(slotId);
+      const stored = await requireStorage().get(key);
+      if (!stored) continue;
+      const result = sanitizeRewardState(stored);
+      if (result.changed) {
+        await requireStorage().put(key, result.save);
+        cleanedSlots.push(slotId);
+      }
+    }
+    if (lastLoadedSave) lastLoadedSave = sanitizeRewardState(lastLoadedSave).save;
+    return cleanedSlots;
+  }
   function prepareSave(save) {
     const prepared = { ...clone(save), version: SAVE_VERSION, saveVersion: SAVE_VERSION, gameVersion, savedAt: new Date().toISOString() };
     for (const key of MASTER_DATA_KEYS) delete prepared[key];
-    return prepared;
+    return sanitizeRewardState(prepared).save;
   }
   function validateSave(save) {
     const issues = [];
@@ -104,7 +154,11 @@
     else await requireStorage().put(ACTIVE_KEY, { slotId });
   }
   async function loadSlot(slotId) {
-    lastLoadedSave = clone(await requireStorage().get(slotKey(slotId)));
+    const key = slotKey(slotId);
+    const stored = await requireStorage().get(key);
+    const result = sanitizeRewardState(stored);
+    if (stored && result.changed) await requireStorage().put(key, result.save);
+    lastLoadedSave = clone(result.save);
     return clone(lastLoadedSave);
   }
   async function saveSlot(slotId, save, options = {}) {
@@ -123,9 +177,15 @@
   }
   async function listSlots() {
     const output = {};
-    for (const slotId of SLOT_IDS) output[slotId] = clone(await requireStorage().get(slotKey(slotId)));
-    output.imported = clone(await requireStorage().get(IMPORTED_WORKING_KEY));
+    for (const slotId of SLOT_IDS) output[slotId] = (await loadSanitizedSlot(slotKey(slotId))).save;
+    output.imported = (await loadSanitizedSlot(IMPORTED_WORKING_KEY)).save;
     return output;
+  }
+  async function loadSanitizedSlot(key) {
+    const stored = await requireStorage().get(key);
+    const result = sanitizeRewardState(stored);
+    if (stored && result.changed) await requireStorage().put(key, result.save);
+    return { save: clone(result.save), changed: result.changed };
   }
   async function importToImported(fileOrObject) {
     const parsed = await parseImport(fileOrObject);
@@ -169,6 +229,7 @@
   global.DreamerSaveManager = {
     SAVE_VERSION, SLOT_IDS, IMPORTED_ID, initialize, configureGameVersion, setActiveSlot, loadSlot, saveSlot, deleteSlot, listSlots,
     importToImported, resetImportedWorking, exportSave, exportFileName, importSave: parseImport, validateSave, prepareSave,
+    configureRewardCatalog, sanitizeRewardState, sanitizeAllRewardState,
     get GAME_VERSION() { return gameVersion; }, get storageMode() { return storageMode; }, get activeSlotId() { return activeSlotId; }, get lastLoadedSave() { return clone(lastLoadedSave); },
   };
 })(window);

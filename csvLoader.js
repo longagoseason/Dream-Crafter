@@ -95,6 +95,8 @@
         } else if (enhancementMatrix && enhancementStats.has(header) && !rangeRow) {
           if (/^(true|false)$/i.test(raw)) record[header] = raw.toLowerCase() === "true";
           else throw new CsvLoadError(`CSV validation failed: ${entry.file} row ${rowIndex + 1}, ${header} must be TRUE or FALSE`, { path: entry.file, row: rowIndex + 1, column: header });
+        } else if (/^effect[12]_multi$/.test(header) && !String(values[headers.indexOf(header.replace("_multi", ""))] ?? "").trim()) {
+          record[header] = raw || null;
         } else if (numberFields.has(header) || (enhancementMatrix && enhancementStats.has(header))) {
           if (raw === "") record[header] = null;
           else {

@@ -32,7 +32,7 @@ const state = {
   savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(), welcomeView: "welcome", patchNoteSeries: null,
   mapMenuOpenGroups: new Set(), warehouseMode: "big", bigStorage: [], bigStoragePage: 0, bigStoragePageCapacity: 30, bigStorageColumns: 5, bigStorageRows: 6,
   collections: [], collectionPage: 0, collectionInventoryPage: 0, collectionInventoryCapacity: 30, collectionStoragePage: 0, collectionStorageCapacity: 30,
-  adventureStartedAt: null, claimedRewards: new Set(), rewardGroupOpenState: {}, rewardView: "available",
+  adventureStartedAt: null, claimedRewards: new Set(), rewardGroupOpenState: {}, rewardView: "available", validRewardIds: new Set(), validRewardDates: new Set(),
 };
 const equipmentTooltipModels = new WeakMap();
 const enhancementFlashKeyframes = new Set();
@@ -83,6 +83,9 @@ async function init() {
     const gameData = await DreamerRuntime.loadGameData();
     state.data = gameData;
     validateGameData(state.data);
+    buildRewardCatalog();
+    DreamerSaveManager.configureRewardCatalog(state.validRewardIds, state.validRewardDates);
+    await DreamerSaveManager.sanitizeAllRewardState();
     DreamerSaveManager.configureGameVersion(getCurrentGameVersion());
     const activeSlot = DreamerSaveManager.activeSlotId;
     const saved = activeSlot ? await DreamerSaveManager.loadSlot(activeSlot) : null;
@@ -377,19 +380,24 @@ function rewardEligibility(row) {
   return Boolean(adventureDate && validRewardDate(row?.date) && adventureDate >= String(row.date));
 }
 
-function currentRewardIds() {
-  return new Set((state.data?.rewards ?? []).map((row) => String(row.reward_id ?? "").trim()).filter(Boolean));
+function buildRewardCatalog() {
+  state.validRewardIds = new Set();
+  state.validRewardDates = new Set();
+  for (const row of state.data?.rewards ?? []) {
+    const rewardId = String(row?.reward_id ?? "").trim();
+    const date = String(row?.date ?? "").trim();
+    if (rewardId) state.validRewardIds.add(rewardId);
+    if (validRewardDate(date)) state.validRewardDates.add(date);
+  }
 }
 
 function normalizeClaimedRewards(source) {
-  const currentIds = currentRewardIds();
-  return new Set((Array.isArray(source) ? source : []).map((value) => String(value).trim()).filter((rewardId) => rewardId && currentIds.has(rewardId)));
+  return new Set((Array.isArray(source) ? source : []).map((value) => String(value).trim()).filter((rewardId) => rewardId && state.validRewardIds.has(rewardId)));
 }
 
 function normalizeRewardGroupOpenState(source) {
-  const currentDates = new Set((state.data?.rewards ?? []).map((row) => String(row.date ?? "")).filter(validRewardDate));
   return Object.fromEntries(Object.entries(source && typeof source === "object" && !Array.isArray(source) ? source : {})
-    .filter(([date, open]) => currentDates.has(date) && typeof open === "boolean"));
+    .filter(([date, open]) => state.validRewardDates.has(date) && typeof open === "boolean"));
 }
 
 function rewardValidation(row, logError = false) {
@@ -425,6 +433,9 @@ function rewardValidation(row, logError = false) {
 
 function hasUnclaimedReward() {
   return (state.data?.rewards ?? []).some((row) => {
+    const rewardId = String(row?.reward_id ?? "").trim();
+    const date = String(row?.date ?? "").trim();
+    if (!state.validRewardIds.has(rewardId) || !state.validRewardDates.has(date)) return false;
     const result = rewardValidation(row);
     return result.type !== "murmur" && result.valid && rewardEligibility(row) && !state.claimedRewards.has(result.rewardId);
   });
@@ -447,8 +458,10 @@ function rewardDisplayName(row, validation = rewardValidation(row)) {
 function eligibleRewardDateGroups() {
   const groups = new Map();
   (state.data?.rewards ?? []).forEach((row, sourceIndex) => {
+    const rewardId = String(row?.reward_id ?? "").trim();
+    const date = String(row?.date ?? "").trim();
+    if (!state.validRewardIds.has(rewardId) || !state.validRewardDates.has(date)) return;
     if (!rewardEligibility(row)) return;
-    const date = String(row.date);
     if (!groups.has(date)) groups.set(date, []);
     groups.get(date).push({ row, sourceIndex });
   });
@@ -529,7 +542,9 @@ function rewardHasInventoryCapacity(validation) {
 }
 
 async function claimReward(rewardId) {
-  const row = state.data.rewards.find((candidate) => String(candidate.reward_id) === String(rewardId));
+  const normalizedRewardId = String(rewardId ?? "").trim();
+  if (!state.validRewardIds.has(normalizedRewardId)) throw new Error("此獎勵已不在目前 Reward.csv 中");
+  const row = state.data.rewards.find((candidate) => String(candidate.reward_id).trim() === normalizedRewardId);
   const validation = rewardValidation(row, true);
   if (!row || !validation.valid || validation.type === "murmur" || !rewardEligibility(row) || state.claimedRewards.has(validation.rewardId)) throw new Error(validation.error || "此獎勵目前不可領取");
   validation.rowId = row.id;
@@ -3942,6 +3957,8 @@ function configuredSkillEffects(skill) {
     target: skill[`effect${index}_target`],
     value: skill[`effect${index}_value`],
     seconds: skill[`effect${index}_sec`],
+    attribute: skill[`effect${index}_Attribute`],
+    multi: skill[`effect${index}_multi`],
   })).filter((effect) => effect.stat);
 }
 
@@ -3951,6 +3968,56 @@ function parseConfiguredEffectValue(rawValue) {
   const numericText = percentage ? text.slice(0, -1).trim() : text;
   const value = Number(numericText);
   return { percentage, value: Number.isFinite(value) ? value : 0, raw: text };
+}
+
+function effectAttributeValue(caster, attribute) {
+  if (!attribute || attribute === "EXP") return null;
+  const allowed = state.data?.attributeIndex?.some((row) => row.Attribute === attribute && row.Attribute !== "EXP");
+  return allowed ? (Number(combatStat(caster, attribute)) || 0) : null;
+}
+
+function warnInvalidEffectScaling(skill, effect, reason) {
+  const warningKey = `invalid-effect-scaling:${skill?.skill_id ?? skill?.name ?? "unknown"}:${effect?.index ?? "?"}:${reason}`;
+  if (runtimeWarningKeys.has(warningKey)) return;
+  runtimeWarningKeys.add(warningKey);
+  console.warn(`[WARN] skill ${skill?.skill_id ?? skill?.name ?? "unknown"} effect${effect?.index ?? "?"} Attribute scaling ignored: ${reason}.`);
+}
+
+function effectAttributeExpressionResult(caster, skill, effect) {
+  const expression = String(effect.attribute ?? "").replace(/\s+/g, "");
+  const hasMulti = effect.multi !== null && effect.multi !== undefined && effect.multi !== "";
+  if (!expression && !hasMulti) return { rawResult: 0, result: 0, bonus: 0, valid: true };
+  if (!expression || !hasMulti || !Number.isFinite(Number(effect.multi))) {
+    warnInvalidEffectScaling(skill, effect, "Attribute 與 multi 必須同時提供，且 multi 必須是合法數字");
+    return { rawResult: 0, result: 0, bonus: 0, valid: false };
+  }
+  const match = expression.match(/^([A-Za-z][A-Za-z0-9_]*)(?:([+\-*/])([A-Za-z][A-Za-z0-9_]*))?$/);
+  if (!match) {
+    warnInvalidEffectScaling(skill, effect, `非法運算式「${effect.attribute}」`);
+    return { rawResult: 0, result: 0, bonus: 0, valid: false };
+  }
+  const left = effectAttributeValue(caster, match[1]);
+  const right = match[3] ? effectAttributeValue(caster, match[3]) : null;
+  if (left === null || (match[3] && right === null)) {
+    warnInvalidEffectScaling(skill, effect, `運算式含有 index_Attribute.csv 未定義或不可使用的 Attribute「${effect.attribute}」`);
+    return { rawResult: 0, result: 0, bonus: 0, valid: false };
+  }
+  let rawResult = left;
+  if (match[2] === "+") rawResult = left + right;
+  else if (match[2] === "-") rawResult = left - right;
+  else if (match[2] === "*") rawResult = left * right;
+  else if (match[2] === "/") rawResult = right === 0 ? 0 : left / right;
+  if (!Number.isFinite(rawResult)) rawResult = 0;
+  const result = Math.abs(rawResult);
+  return { rawResult, result, bonus: result * Number(effect.multi), valid: true };
+}
+
+function scaledConfiguredEffectValue(caster, skill, effect) {
+  const parsed = parseConfiguredEffectValue(effect.value);
+  const scaling = effectAttributeExpressionResult(caster, skill, effect);
+  const sign = parsed.value < 0 ? -1 : 1;
+  const value = roundSigned(parsed.value + sign * scaling.bonus);
+  return { ...parsed, value, sign, scaling, raw: parsed.percentage ? `${value}%` : String(value) };
 }
 
 function parseDotEffectValue(rawValue, skill = {}, effect = {}) {
@@ -3973,13 +4040,12 @@ function baseAttributeValue(target, stat) {
 }
 
 function configuredEffectAmount(caster, skill, effect, target, context = {}) {
-  const parsed = parseConfiguredEffectValue(effect.value);
-  const referenceBonus = Number(context.effectReferenceBonus?.(effect, target) ?? 0) || 0;
-  if (!parsed.percentage) return roundSigned(parsed.value + referenceBonus);
-  if (effect.stat === "HP") return roundSigned((Math.max(0, Number(target.maxHp) || 0) * parsed.value / 100) + referenceBonus);
-  if (effect.stat === "MP") return roundSigned((Math.max(0, Number(target.maxMp) || 0) * parsed.value / 100) + referenceBonus);
+  const parsed = scaledConfiguredEffectValue(caster, skill, effect);
+  if (!parsed.percentage) return roundSigned(parsed.value);
+  if (effect.stat === "HP") return roundSigned(Math.max(0, Number(target.maxHp) || 0) * parsed.value / 100);
+  if (effect.stat === "MP") return roundSigned(Math.max(0, Number(target.maxMp) || 0) * parsed.value / 100);
   const base = baseAttributeValue(target, effect.stat);
-  return roundSigned(base * (parsed.value / 100 - 1) + referenceBonus);
+  return roundSigned(base * (parsed.value / 100 - 1));
 }
 
 function statusCasterEntityKey(caster) {
@@ -4204,7 +4270,7 @@ function applyConfiguredSkillEffects(caster, skill, context) {
       continue;
     }
     if (["HPleech", "MPleech"].includes(effect.stat)) {
-      const parsed = parseConfiguredEffectValue(effect.value);
+      const parsed = scaledConfiguredEffectValue(caster, skill, effect);
       const amount = parsed.percentage
         ? Math.max(0, Number(context.mainDamageTotal) || 0) * Math.max(0, parsed.value) / 100
         : Math.max(0, parsed.value);
@@ -4213,7 +4279,8 @@ function applyConfiguredSkillEffects(caster, skill, context) {
       continue;
     }
     if (effect.stat === "DOT") {
-      const parsed = parseDotEffectValue(effect.value, skill, effect);
+      const scaled = scaledConfiguredEffectValue(caster, skill, effect);
+      const parsed = parseDotEffectValue(scaled.raw, skill, effect);
       const seconds = Number(effect.seconds);
       if (!parsed.valid || !(seconds > 0) || !Number.isFinite(seconds)) continue;
       const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
@@ -4403,26 +4470,10 @@ function skillTargets(actor, skill) {
   return resolveSkillTargetSet(actor, skill.damage_target, livingParty(), state.enemies);
 }
 
-function skillReferenceValue(actor, attribute) {
-  if (!attribute || attribute === "EXP") return 0;
-  const allowed = state.data?.attributeIndex?.some((row) => row.Attribute === attribute && row.Attribute !== "EXP");
-  if (!allowed) return 0;
-  return Number(combatStat(actor, attribute)) || 0;
-}
-
-function skillReferenceBonus(actor, skill) {
-  if (!skill.effect_Attribute || skill.effect_multi === null || skill.effect_multi === undefined) return 0;
-  return skillReferenceValue(actor, skill.effect_Attribute) * Number(skill.effect_multi);
-}
-
-function adjustedSkillBaseDamage(actor, skill) {
-  return Number(skill.base_damage || 0) + skillReferenceBonus(actor, skill);
-}
-
 function executeDamageSkill(actor, skill) {
   const mainTargets = skillTargets(actor, skill);
   const context = { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
-    baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) };
+    baseDamage: Number(skill.base_damage || 0) };
   context.mainDamageTotal = 0;
   context.mainDamageByTarget = new Map(mainTargets.map((target) => [target, 0]));
   for (const target of mainTargets) {
@@ -4445,13 +4496,13 @@ function executeHealSkill(actor, skill) {
     logSkillRecovery(actor, skill, target, recovery, { channel: "player", skillColor }, result.critical.isCritical);
   }
   applyConfiguredSkillEffects(actor, skill, { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
-    baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) });
+    baseDamage: Number(skill.base_damage || 0) });
 }
 
 function executeBuffSkill(actor, skill) {
   const mainTargets = skillTargets(actor, skill);
   applyConfiguredSkillEffects(actor, skill, { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
-    baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) });
+    baseDamage: Number(skill.base_damage || 0) });
 }
 
 function heroEffectTargets(actor, targetType) {
@@ -4461,7 +4512,7 @@ function heroEffectTargets(actor, targetType) {
 function applyHeroSkillEffects(actor, skill) {
   const mainTargets = skillTargets(actor, skill);
   applyConfiguredSkillEffects(actor, skill, { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
-    baseDamage: adjustedSkillBaseDamage(actor, skill), effectReferenceBonus: () => skillReferenceBonus(actor, skill) });
+    baseDamage: Number(skill.base_damage || 0) });
 }
 
 function playerAttack(actor, enemy) {

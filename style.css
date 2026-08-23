@@ -149,7 +149,7 @@ button:not(:disabled) { cursor:pointer; } button:not(:disabled):hover { backgrou
 .welcome-dialog-actions button { width:auto; min-width:max-content; min-height:28px; white-space:nowrap; }
 .reward-dialog { width:min(900px,calc(100vw - 40px)); }
 .reward-dialog-actions { display:flex; align-items:center; gap:8px; }
-#reward-view-toggle { width:auto; min-width:7em; white-space:nowrap; }
+#reward-view-toggle { width:auto; min-width:7em; white-space:nowrap; font:inherit; font-weight:700; }
 #reward-close { flex:0 0 48px; width:48px; }
 .reward-content { padding:16px; }
 .reward-adventure-time { margin:0 0 12px; color:var(--muted); font-weight:700; }
