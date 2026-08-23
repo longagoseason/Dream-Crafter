@@ -32,17 +32,17 @@ book108,流星劍,csk108,skillbook.png,#FFCC99,learn_skill,warrior,,,,20,18000,1
 book109,不屈意志,csk109,skillbook.png,#FFCC99,learn_skill,warrior,,,,25,23000,2300
 book110,蒼龍破,csk110,skillbook.png,#FFCC99,learn_skill,warrior,,,,29,27000,2700
 book111,戰士的自我修養 Lv.31,csk111,skillbook.png,#FFCC99,learn_skill,warrior,,,,31,60000,6000
-book201,風刃,csk201,skillbook.png,#CC99FF,learn_skill,mage,,,,3,3000,300
-book202,魔法之道,csk202,skillbook.png,#CC99FF,learn_skill,mage,,,,5,5000,500
-book203,火球術,csk203,skillbook.png,#CC99FF,learn_skill,mage,,,,8,8000,800
-book204,寒冰之槍,csk204,skillbook.png,#CC99FF,learn_skill,mage,,,,11,10000,1000
-book205,法師的自我修養 Lv.11,csk205,skillbook.png,#CC99FF,learn_skill,mage,,,,11,20000,2000
-book206,冰牢,csk206,skillbook.png,#CC99FF,learn_skill,mage,,,,15,13000,1300
-book207,魔法護盾,csk207,skillbook.png,#CC99FF,learn_skill,mage,,,,17,15000,1500
-book208,落雷,csk208,skillbook.png,#CC99FF,learn_skill,mage,,,,20,18000,1800
-book209,奧術空想,csk209,skillbook.png,#CC99FF,learn_skill,mage,,,,25,23000,2300
-book210,連鎖閃電,csk210,skillbook.png,#CC99FF,learn_skill,mage,,,,29,27000,2700
-book211,法師的自我修養 Lv.31,csk211,skillbook.png,#CC99FF,learn_skill,mage,,,,31,60000,6000
+book201,風刃,csk201,skillbook.png,#99CCFF,learn_skill,mage,,,,3,3000,300
+book202,魔法之道,csk202,skillbook.png,#99CCFF,learn_skill,mage,,,,5,5000,500
+book203,火球術,csk203,skillbook.png,#99CCFF,learn_skill,mage,,,,8,8000,800
+book204,寒冰之槍,csk204,skillbook.png,#99CCFF,learn_skill,mage,,,,11,10000,1000
+book205,法師的自我修養 Lv.11,csk205,skillbook.png,#99CCFF,learn_skill,mage,,,,11,20000,2000
+book206,冰牢,csk206,skillbook.png,#99CCFF,learn_skill,mage,,,,15,13000,1300
+book207,魔法護盾,csk207,skillbook.png,#99CCFF,learn_skill,mage,,,,17,15000,1500
+book208,落雷,csk208,skillbook.png,#99CCFF,learn_skill,mage,,,,20,18000,1800
+book209,奧術空想,csk209,skillbook.png,#99CCFF,learn_skill,mage,,,,25,23000,2300
+book210,連鎖閃電,csk210,skillbook.png,#99CCFF,learn_skill,mage,,,,29,27000,2700
+book211,法師的自我修養 Lv.31,csk211,skillbook.png,#99CCFF,learn_skill,mage,,,,31,60000,6000
 book301,螺旋拳,csk301,skillbook.png,#FFE082,learn_skill,martial,,,,3,3000,300
 book302,武鬥之道,csk302,skillbook.png,#FFE082,learn_skill,martial,,,,5,5000,500
 book303,迴旋踢,csk303,skillbook.png,#FFE082,learn_skill,martial,,,,8,8000,800
@@ -76,3 +76,14 @@ book508,殘影亂斬,csk508,skillbook.png,#00BFA5,learn_skill,thief,,,,20,18000,
 book509,消失,csk509,skillbook.png,#00BFA5,learn_skill,thief,,,,25,23000,2300
 book510,致命突刺,csk510,skillbook.png,#00BFA5,learn_skill,thief,,,,29,27000,2700
 book511,盜賊的自我修養 Lv.31,csk511,skillbook.png,#00BFA5,learn_skill,thief,,,,31,60000,6000
+book601,魔力斬擊,csk601,skillbook.png,#CC99FF,learn_skill,spellblade,,,,3,3000,300
+book602,魔劍之道,csk602,skillbook.png,#CC99FF,learn_skill,spellblade,,,,5,5000,500
+book603,注魔氣刃斬,csk603,skillbook.png,#CC99FF,learn_skill,spellblade,,,,8,8000,800
+book604,冥月斬,csk604,skillbook.png,#CC99FF,learn_skill,spellblade,,,,11,11000,1100
+book605,芙蕾雅的信仰,csk605,skillbook.png,#CC99FF,learn_skill,spellblade,,,,13,20000,1300
+book606,反手破魔劍,csk606,skillbook.png,#CC99FF,learn_skill,spellblade,,,,15,13000,1300
+book607,血劍之道,csk607,skillbook.png,#CC99FF,learn_skill,spellblade,,,,17,15000,1500
+book608,悖魔鋒刃,csk608,skillbook.png,#CC99FF,learn_skill,spellblade,,,,20,40000,2000
+book609,提爾的信仰,csk609,skillbook.png,#CC99FF,learn_skill,spellblade,,,,23,23000,2300
+book610,劍刃風暴✗魔,csk610,skillbook.png,#CC99FF,learn_skill,spellblade,,,,29,27000,2700
+book611,魂體轉換,csk611,skillbook.png,#CC99FF,learn_skill,spellblade,,,,31,100000,3000

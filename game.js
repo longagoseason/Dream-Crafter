@@ -17,7 +17,7 @@ const DERIVED_STAT_KEYS = ["ATK", "MATK", "CRI", "CRI_DMG", "AC", "MR", "AAR", "
 const EQUIPMENT_SLOTS = [
   { key: "necklace_1", positions: ["necklace"] }, { key: "earrings_1", positions: ["earrings"] },
   { key: "helmet_1", positions: ["helmet"] }, { key: "earrings_2", positions: ["earrings"] },
-  { key: "weapon_1", positions: ["physical_weapon", "magic_weapon"] }, { key: "body_1", positions: ["body"] },
+  { key: "weapon_1", positions: ["weapon"] }, { key: "body_1", positions: ["body"] },
   { key: "shield_1", positions: ["shield"] }, { key: "ring_1", positions: ["ring"] },
   { key: "ring_2", positions: ["ring"] }, { key: "kneepads_1", positions: ["kneepads"] },
   { key: "ring_3", positions: ["ring"] }, { key: "ring_4", positions: ["ring"] },
@@ -141,15 +141,13 @@ function exportPlayerSave() {
     gameVersion: globalThis.DreamerSaveManager?.GAME_VERSION ?? getCurrentGameVersion(),
     teamName: state.teamName,
     gold: state.gold,
-    inventory: state.inventory.map((entry) => entry.isEquipment
-      ? { key: entry.key, itemUuid: entry.itemUuid, itemId: entry.itemId, inventoryIndex: entry.inventoryIndex, locked: Boolean(entry.locked), enhancement: entry.enhancement, quantity: 1, isEquipment: true }
-      : { key: entry.key || entry.itemId, itemId: entry.itemId, inventoryIndex: entry.inventoryIndex, quantity: entry.quantity, locked: Boolean(entry.locked), isEquipment: false }),
-    autoSellItemIds: [...state.autoSellItemIds],
-    bigStorage: state.bigStorage.map((entry) => serializePortableEntry(entry, "storageIndex")),
+    inventory: state.inventory.filter(savedEntryCatalog).map((entry) => serializePortableEntry(entry, "inventoryIndex")),
+    autoSellItemIds: [...state.autoSellItemIds].filter((itemId) => catalogItem(itemId)),
+    bigStorage: state.bigStorage.filter(savedEntryCatalog).map((entry) => serializePortableEntry(entry, "storageIndex")),
     collections: state.collections.map((collection) => ({
       collectionId: collection.collectionId,
       name: collection.name,
-      equipment: Object.fromEntries(Object.entries(collection.equipment ?? {}).map(([slot, equipped]) => [slot, serializeEquipmentInstance(equipped)])),
+      equipment: serializeEquipmentMap(collection.equipment),
     })),
     adventure_started_at: state.adventureStartedAt,
     claimed_rewards: [...state.claimedRewards],
@@ -160,7 +158,8 @@ function exportPlayerSave() {
     roster: state.roster.map((hero) => ({
       classId: hero.classId, slot: hero.slot, level: hero.level, exp: hero.exp, attributes: hero.attributes,
       customName: hero.customName,
-      equipment: hero.equipmentSets["1"], equipmentSets: hero.equipmentSets, activeEquipmentSet: hero.activeEquipmentSet,
+      equipment: serializeEquipmentMap(hero.equipmentSets["1"]),
+      equipmentSets: { "1": serializeEquipmentMap(hero.equipmentSets["1"]), "2": serializeEquipmentMap(hero.equipmentSets["2"]) }, activeEquipmentSet: hero.activeEquipmentSet,
       levelPlan: hero.levelPlan, growthStats: hero.growthStats,
       hp: hero.hp, mp: hero.mp, learnedSkillIds: [...hero.learnedSkillIds], skillEnabled: hero.skillEnabled,
       skillSettings: hero.skillSettings,
@@ -198,12 +197,14 @@ function applyPlayerSave(saved) {
     hero.recoverySettings = {
       hpEnabled: source.recoverySettings?.hpEnabled ?? legacyAutoRecovery,
       hpPercent: clamp(Number(source.recoverySettings?.hpPercent ?? 20), 1, 100),
-      hpItemId: source.recoverySettings?.hpItemId ?? null,
+      hpItemId: validRecoveryItemId(source.recoverySettings?.hpItemId, "HPrecover"),
       mpEnabled: source.recoverySettings?.mpEnabled ?? legacyAutoRecovery,
       mpPercent: clamp(Number(source.recoverySettings?.mpPercent ?? 20), 1, 100),
-      mpItemId: source.recoverySettings?.mpItemId ?? null,
+      mpItemId: validRecoveryItemId(source.recoverySettings?.mpItemId, "MPrecover"),
     };
-    hero.itemCooldowns = Object.fromEntries(Object.entries(source.itemCooldowns ?? {}).map(([key, value]) => [key, Math.max(0, Number(value) || 0)]));
+    hero.itemCooldowns = Object.fromEntries(Object.entries(source.itemCooldowns ?? {})
+      .filter(([itemId]) => state.data.item.some((item) => item.item_id === itemId))
+      .map(([key, value]) => [key, Math.max(0, Number(value) || 0)]));
     hero.resetAvailableAt = Math.max(0, Number(source.resetAvailableAt) || 0);
     recalculateHeroStats(hero, true);
     hero.hp = clamp(Number(source.hp) || 0, 0, hero.maxHp);
@@ -212,12 +213,7 @@ function applyPlayerSave(saved) {
   state.party = ["A", "B", "C"].map((slot) => state.roster.find((hero) => hero.slot === slot));
   state.gold = Math.max(0, Math.trunc(Number(saved.gold) || 0));
   state.teamName = normalizeTeamName(saved.teamName);
-  state.inventory = (saved.inventory ?? [])
-    .map((entry) => ({ entry, item: catalogItem(entry.itemId) }))
-    .filter(({ item }) => Boolean(item))
-    .map(({ entry, item }) => state.data.equipment.some((candidate) => candidate.item_id === entry.itemId)
-      ? { ...normalizeEquipmentInstance(entry), inventoryIndex: Number(entry.inventoryIndex), name: item.item_name, quantity: 1, isEquipment: true }
-      : { key: entry.key || entry.itemId, itemId: entry.itemId, inventoryIndex: Number(entry.inventoryIndex), name: item.item_name, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), locked: Boolean(entry.locked), isEquipment: false });
+  state.inventory = normalizePortableEntries(saved.inventory ?? [], INVENTORY_MAX_SLOTS, "inventoryIndex");
   normalizeInventoryIndices();
   state.bigStorage = normalizePortableEntries(saved.bigStorage ?? saved.warehouse ?? [], BIG_STORAGE_MAX_SLOTS, "storageIndex");
   state.collections = normalizeCollections(saved.collections ?? saved.collectionStorage ?? []);
@@ -652,6 +648,28 @@ function normalizeEquipmentInstance(source = {}) {
   return { key: itemUuid, itemUuid, itemId: source.itemId ?? source.item_id, locked: Boolean(source.locked), enhancement: normalizeEnhancement(source) };
 }
 
+function savedEntryItemId(entry) {
+  return entry?.itemId ?? entry?.item_id ?? null;
+}
+
+function savedEntryCatalog(entry) {
+  const itemId = savedEntryItemId(entry);
+  if (!itemId) return null;
+  const equipment = state.data.equipment.find((item) => item.item_id === itemId) ?? null;
+  const item = state.data.item.find((candidate) => candidate.item_id === itemId) ?? null;
+  if (entry?.isEquipment === true) return equipment ? { kind: "equipment", item: equipment } : null;
+  if (entry?.isEquipment === false) return item ? { kind: "item", item } : null;
+  if (equipment && !item) return { kind: "equipment", item: equipment };
+  if (item && !equipment) return { kind: "item", item };
+  if (equipment && item) return entry?.itemUuid || entry?.item_uuid || entry?.enhancement ? { kind: "equipment", item: equipment } : { kind: "item", item };
+  return null;
+}
+
+function validRecoveryItemId(itemId, effect) {
+  if (!itemId) return null;
+  return state.data.item.some((item) => item.item_id === itemId && item.effect === effect) ? itemId : null;
+}
+
 function serializeEquipmentInstance(instance) {
   const normalized = normalizeEquipmentInstance(instance);
   return { key: normalized.key, itemUuid: normalized.itemUuid, itemId: normalized.itemId, locked: Boolean(normalized.locked), enhancement: normalized.enhancement, quantity: 1, isEquipment: true };
@@ -665,12 +683,17 @@ function serializePortableEntry(entry, indexKey = "inventoryIndex") {
 
 function normalizePortableEntries(entries, maximum, indexKey) {
   return (Array.isArray(entries) ? entries : [])
-    .map((entry) => ({ entry, item: catalogItem(entry?.itemId ?? entry?.item_id) }))
-    .filter(({ item }) => Boolean(item))
+    .map((entry) => ({ entry, catalog: savedEntryCatalog(entry) }))
+    .filter(({ catalog }) => Boolean(catalog))
     .slice(0, maximum)
-    .map(({ entry, item }, order) => state.data.equipment.some((candidate) => candidate.item_id === (entry.itemId ?? entry.item_id))
-      ? { ...normalizeEquipmentInstance(entry), [indexKey]: order, name: item.item_name, quantity: 1, isEquipment: true }
-      : { key: entry.key || entry.itemId || entry.item_id, itemId: entry.itemId ?? entry.item_id, [indexKey]: order, name: item.item_name, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), locked: Boolean(entry.locked), isEquipment: false });
+    .map(({ entry, catalog }, order) => catalog.kind === "equipment"
+      ? { ...normalizeEquipmentInstance(entry), [indexKey]: order, name: catalog.item.item_name, quantity: 1, isEquipment: true }
+      : { key: entry.key || savedEntryItemId(entry), itemId: savedEntryItemId(entry), [indexKey]: order, name: catalog.item.item_name, quantity: Math.max(1, Math.trunc(Number(entry.quantity) || 1)), locked: Boolean(entry.locked), isEquipment: false });
+}
+
+function serializeEquipmentMap(source = {}) {
+  return Object.fromEntries(Object.entries(normalizeEquipmentMap(source))
+    .map(([slot, equipped]) => [slot, serializeEquipmentInstance(equipped)]));
 }
 
 function normalizeCollectionName(value, collectionId) {
@@ -704,8 +727,11 @@ function normalizeEquipmentMap(source = {}) {
     delete migrated[legacyKey];
   }
   return Object.fromEntries(Object.entries(migrated)
-    .filter(([slot, equipped]) => EQUIPMENT_SLOTS.some((candidate) => candidate.key === slot)
-      && state.data.equipment.some((item) => item.item_id === (equipped?.itemId ?? equipped?.item_id)))
+    .filter(([slot, equipped]) => {
+      const slotDefinition = EQUIPMENT_SLOTS.find((candidate) => candidate.key === slot);
+      const item = state.data.equipment.find((candidate) => candidate.item_id === savedEntryItemId(equipped));
+      return Boolean(slotDefinition && item && equipmentFitsSlot(item, slotDefinition));
+    })
     .map(([slot, equipped]) => [slot, normalizeEquipmentInstance(equipped)]));
 }
 
@@ -1130,7 +1156,7 @@ function itemTooltip(item) {
 }
 
 function equipmentSlotLabel(position) {
-  return { necklace:"項鍊", earrings:"耳環", helmet:"頭盔", physical_weapon:"武器", magic_weapon:"武器", body:"盔甲", shield:"副手", ring:"戒指", kneepads:"護膝", idol:"神像", gloves:"手套", shoe:"鞋子", core:"核心" }[position] ?? position;
+  return { necklace:"項鍊", earrings:"耳環", helmet:"頭盔", weapon:"武器", physical_weapon:"武器", magic_weapon:"武器", hybrid_weapon:"武器", body:"盔甲", shield:"副手", ring:"戒指", kneepads:"護膝", idol:"神像", gloves:"手套", shoe:"鞋子", core:"核心" }[position] ?? position;
 }
 
 function buildInventoryGrid() {
@@ -1351,13 +1377,31 @@ function assignInitialEquipment(hero, cls) {
   }
 }
 
+function isWeaponEquipment(item) {
+  return Boolean(String(item?.weapon_type ?? "").trim());
+}
+
+function isDualWieldingEquipment(item) {
+  return String(item?.weapon_type ?? "").trim() === "Dual_wielding";
+}
+
+function equipmentFitsSlot(item, slot) {
+  if (!item || !slot) return false;
+  if (isWeaponEquipment(item)) {
+    return slot.key === "weapon_1" || (slot.key === "shield_1" && isDualWieldingEquipment(item));
+  }
+  if (slot.key === "weapon_1") return false;
+  return slot.positions.includes(item.EQ_position);
+}
+
+function compatibleEquipmentSlots(item) {
+  return EQUIPMENT_SLOTS.filter((slot) => equipmentFitsSlot(item, slot));
+}
+
 function findEquipmentSlot(hero, item, setNumber = hero?.activeEquipmentSet) {
   const equipment = equipmentConfig(hero, setNumber);
-  const compatible = EQUIPMENT_SLOTS.filter((slot) => {
-    if (slot.positions.includes(item?.EQ_position)) return true;
-    return item?.weapon_type === "martial_weapon" && slot.key === "shield_1";
-  });
-  if (item?.weapon_type === "martial_weapon") {
+  const compatible = compatibleEquipmentSlots(item);
+  if (isDualWieldingEquipment(item)) {
     const mainWeapon = equipment.weapon_1
       ? state.data.equipment.find((row) => row.item_id === equipment.weapon_1.itemId)
       : null;
@@ -3078,7 +3122,13 @@ function openCollectionRenameDialog() {
 function closeCollectionRenameDialog() { if ($("#collection-rename-dialog").open) $("#collection-rename-dialog").close(); }
 
 function collectionSlotForItem(item, equipment) {
-  const compatible = EQUIPMENT_SLOTS.filter((slot) => slot.positions.includes(item?.EQ_position) || (item?.weapon_type === "martial_weapon" && slot.key === "shield_1"));
+  const compatible = compatibleEquipmentSlots(item);
+  if (isDualWieldingEquipment(item)) {
+    const mainWeapon = equipment.weapon_1
+      ? state.data.equipment.find((row) => row.item_id === equipment.weapon_1.itemId)
+      : null;
+    if (mainWeapon?.weapon_type === "two_hand_weapon") return "weapon_1";
+  }
   return compatible.find((slot) => !equipment[slot.key])?.key ?? compatible[0]?.key ?? null;
 }
 
@@ -4590,7 +4640,7 @@ function useInventoryItem(inventoryIndex) {
     const slotKey = findEquipmentSlot(hero, item, editSet);
     if (!slotKey) return { used: false, message: `${item.item_name} 沒有對應的裝備欄位。` };
     const replaced = equipment[slotKey];
-    const conflictSlot = findWeaponShieldConflict(hero, item, editSet);
+    const conflictSlot = findWeaponShieldConflict(hero, item, slotKey, editSet);
     const conflict = conflictSlot ? equipment[conflictSlot] : null;
     const returnedNames = [];
     state.inventory.splice(arrayIndex, 1);
@@ -4658,10 +4708,10 @@ function returnEquippedItemToInventory(equipped, preferredIndex = null) {
   return inventoryIndex;
 }
 
-function findWeaponShieldConflict(hero, item, setNumber = hero?.activeEquipmentSet) {
+function findWeaponShieldConflict(hero, item, targetSlot, setNumber = hero?.activeEquipmentSet) {
   const equipment = equipmentConfig(hero, setNumber);
-  if (item.weapon_type === "two_hand_weapon" && equipment.shield_1) return "shield_1";
-  if (item.EQ_position !== "shield" || !equipment.weapon_1) return null;
+  if (targetSlot === "weapon_1" && item.weapon_type === "two_hand_weapon" && equipment.shield_1) return "shield_1";
+  if (targetSlot !== "shield_1" || !equipment.weapon_1) return null;
   const weapon = state.data.equipment.find((row) => row.item_id === equipment.weapon_1.itemId);
   return weapon?.weapon_type === "two_hand_weapon" ? "weapon_1" : null;
 }

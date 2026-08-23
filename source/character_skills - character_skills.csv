@@ -59,6 +59,15 @@ thief,殘影亂斬,csk508,18,36,5,#CC6600,physical,front,18,200,0,TRUE,ASPD,self
 thief,消失,csk509,23,50,60,#FFFF00,buff,none,0,0,0,TRUE,AAR,self,5,60,SAR,self,5,60,DEX,0.1,TRUE,37,,,,[成長] | [buff]
 thief,致命突刺,csk510,27,50,6,#CC6600,physical,front,27,220,0,TRUE,CRI,self,5,10,,,,,DEX,0.1,TRUE,85,,,,[成長]
 thief,盜賊的自我修養 Lv.31,csk511,31,100,300,#FFFF00,buff,none,0,0,0,TRUE,CRI,self,5,60,CRI_DMG,self,60,60,,,TRUE,9,,,,[成長] | [buff]
-spellblade,攻擊,csk600,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,,,,
-spellblade,魔力斬,csk601,1,5,0,#00FFFF,magic,front,0,100,0,TRUE,ATK,self,1,2,,,,,MATK,1,TRUE,99,,,,[成長]
-spellblade,魔劍之道,csk602,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,1,60,,,,,MDAM,1,TRUE,39,,,,[成長] | [buff]
+spellblade,攻擊,csk600,1,0,0,#FFFFFF,hybrid,front,0,100,0,FALSE,,,,,,,,,,,TRUE,100,self_hp_above_mp_below,,,
+spellblade,魔力斬擊,csk601,1,5,0,#00FFFF,hybrid,front,0,120,0,TRUE,,,,,,,,,,,TRUE,99,,,,
+spellblade,魔劍之道,csk602,3,1,60,#FFFF00,buff,none,0,0,0,TRUE,MATK,self,1,60,MPR,self,-1,60,INT,0.1,TRUE,39,,,,[成長] | [buff]
+spellblade,注魔氣刃斬,csk603,5,25,2,#CC6600,hybrid,aoe,5,100,0,TRUE,,,,,,,,,,,TRUE,69,,,,[犧牲] | [成長] | [buff]
+spellblade,冥月斬,csk604,8,16,1,#CC6600,hybrid,front,8,140,0,TRUE,,,,,,,,,,,TRUE,98,,,,
+spellblade,芙蕾雅的信仰,csk605,11,50,60,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,1,60,MDAM,self,1,60,STR,0.1,TRUE,10,,,,[成長] | [buff]
+spellblade,反手破魔劍,csk606,13,39,3,#CC6600,hybrid,aoe,13,80,0,TRUE,AC,DMGchoose,-20,5,MR,DMGchoose,-20,5,,,TRUE,68,,,,
+spellblade,血劍之道,csk607,15,1,60,#FFFF00,buff,none,0,0,0,TRUE,ATK,self,1,60,HPR,self,-1,60,STR,0.1,TRUE,38,,,,[犧牲] | [成長] | [buff]
+spellblade,悖魔鋒刃,csk608,18,36,2,#CC6600,hybrid,front,18,160,0,TRUE,,,,,,,,,STR,0.5,TRUE,97,,,,[成長]
+spellblade,提爾的信仰,csk609,21,50,60,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,1,60,MDAM,self,1,60,INT,0.1,TRUE,9,,,,[成長] | [buff]
+spellblade,劍刃風暴✗魔,csk610,25,81,4,#CC6600,hybrid,aoe,27,120,0,TRUE,AAR,DMGchoose,-20,5,SAR,DMGchoose,-20,5,INT,0.1,TRUE,67,,,,[成長]
+spellblade,魂體轉換,csk611,31,0,5,#FFFFFF,buff,none,0,0,0,TRUE,HPR,self,-100,2,MPR,self,50,2,,,TRUE,19,self_hp_above_mp_below,,,[犧牲] | 治癒師一生之敵
