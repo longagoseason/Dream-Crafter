@@ -8,7 +8,7 @@ eq0006,初心護膝,100,kneepads,,all,kneepads.png,#A0A0A0,1,,,,,,,,,1,1,,,,,,,,
 eq0007,初心戒指,100,ring,,all,ring.png,#A0A0A0,1,,,,,,,1,,,,,,,,,,,,,
 eq0008,初心耳環,100,earrings,,all,earrings.png,#A0A0A0,1,,,,,,,,,,,10,,10,,,,,,,
 eq0009,初心項鍊,100,necklace,,all,necklace.png,#A0A0A0,1,,,,,1,1,,,,,,,,,,,,,,
-eq0010,木劍,100,physical_weapon,one_hand_weapon,warrior|thief|spellblade,sword.png,#A0A0A0,1,2,,,,,,,,,,,,,,1,,,,,1
+eq0010,木劍,100,physical_weapon,one_hand_weapon,warrior|thief|spellblade,sword.png,#A0A0A0,1,2,2,,,,,,,,,,,,,1,,1,,,1
 eq0011,木杖,100,magic_weapon,two_hand_weapon,mage|priest,wand.png,#A0A0A0,1,,2,,,,,,,,,,,10,,,,1,1,,
 eq0012,布拳套,100,physical_weapon,Dual_wielding,martial,knuckles.png,#A0A0A0,1,2,,,,5,,,,,,,,,,1,1,,,,
 eq0031,Lv.1 力量戒指,1000,ring,,all,ring.png,#A0A0A0,10,,,,,,,1,1,,,,,,,2,,,,,
