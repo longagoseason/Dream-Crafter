@@ -148,6 +148,9 @@ button:not(:disabled) { cursor:pointer; } button:not(:disabled):hover { backgrou
 .welcome-dialog-actions { display:flex; align-items:center; gap:1em; }
 .welcome-dialog-actions button { width:auto; min-width:max-content; min-height:28px; white-space:nowrap; }
 .reward-dialog { width:min(900px,calc(100vw - 40px)); }
+.reward-dialog-actions { display:flex; align-items:center; gap:8px; }
+#reward-view-toggle { width:auto; min-width:7em; white-space:nowrap; }
+#reward-close { flex:0 0 48px; width:48px; }
 .reward-content { padding:16px; }
 .reward-adventure-time { margin:0 0 12px; color:var(--muted); font-weight:700; }
 .reward-groups { display:grid; gap:8px; max-height:min(65vh,620px); overflow:auto; }
@@ -160,6 +163,9 @@ button:not(:disabled) { cursor:pointer; } button:not(:disabled):hover { backgrou
 .reward-row button { min-width:5em; white-space:nowrap; }
 .reward-message { min-height:20px; margin:10px 0 0; color:#00ffff; }
 .reward-message.error { color:#ff5555; }
+.reward-history-group { padding:12px 14px; border:1px solid var(--line); background:#171717; }
+.reward-history-group h3 { margin:0 0 8px; }
+.reward-history-list { display:grid; gap:5px; margin:8px 0 0; padding-left:1.4em; }
 #welcome-view-toggle { padding-inline:12px; font-size:13px; }
 #welcome-close { flex:0 0 48px; width:48px; }
 .patch-note-series { display:flex; justify-content:center; gap:8px; flex-wrap:wrap; padding-bottom:12px; border-bottom:1px solid var(--line); }

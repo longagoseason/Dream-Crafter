@@ -32,12 +32,13 @@ const state = {
   savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(), welcomeView: "welcome", patchNoteSeries: null,
   mapMenuOpenGroups: new Set(), warehouseMode: "big", bigStorage: [], bigStoragePage: 0, bigStoragePageCapacity: 30, bigStorageColumns: 5, bigStorageRows: 6,
   collections: [], collectionPage: 0, collectionInventoryPage: 0, collectionInventoryCapacity: 30, collectionStoragePage: 0, collectionStorageCapacity: 30,
-  adventureStartedAt: null, claimedRewards: new Set(),
+  adventureStartedAt: null, claimedRewards: new Set(), rewardGroupOpenState: {}, rewardView: "available",
 };
 const equipmentTooltipModels = new WeakMap();
 const enhancementFlashKeyframes = new Set();
 const slotPatternStatus = new Map();
 const BULK_SHOP_EFFECTS = new Set(["HPrecover", "MPrecover", "Return_Enhance", "Chaos_Enhance", "Bless_Enhance", "Curse_Enhance"]);
+const CLAIMABLE_REWARD_TYPES = new Set(["equipment", "item", "gold"]);
 const $ = (selector) => document.querySelector(selector);
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const round = (n) => Math.max(0, Math.round(n * 10) / 10);
@@ -151,6 +152,7 @@ function exportPlayerSave() {
     })),
     adventure_started_at: state.adventureStartedAt,
     claimed_rewards: [...state.claimedRewards],
+    reward_group_open_state: { ...state.rewardGroupOpenState },
     currentMapId: state.map?.map_id ?? null,
     paused: Boolean(state.paused),
     townAutoReturn: state.map?.map_id === "town001" && state.townAutoReturn,
@@ -219,7 +221,9 @@ function applyPlayerSave(saved) {
   state.collections = normalizeCollections(saved.collections ?? saved.collectionStorage ?? []);
   const legacyAdventureTime = saved.adventure_started_at ?? saved.savedAt;
   state.adventureStartedAt = validAdventureTimestamp(legacyAdventureTime) ? new Date(legacyAdventureTime).toISOString() : new Date().toISOString();
-  state.claimedRewards = new Set((Array.isArray(saved.claimed_rewards) ? saved.claimed_rewards : []).map((value) => String(value)).filter(Boolean));
+  state.claimedRewards = normalizeClaimedRewards(saved.claimed_rewards);
+  state.rewardGroupOpenState = normalizeRewardGroupOpenState(saved.reward_group_open_state);
+  state.rewardView = "available";
   state.autoSellItemIds = new Set((saved.autoSellItemIds ?? []).filter((itemId) => catalogItem(itemId)));
   ensureUniqueEquipmentUuids();
   state.savedMapId = saved.currentMapId ?? null;
@@ -262,7 +266,7 @@ function forceSafeTown() {
 function resetRuntimeFromSave(saved) {
   state.enemies = []; state.inventory = []; state.bigStorage = []; state.collections = []; state.gold = 0; state.drops = []; state.autoSellItemIds = new Set();
   state.elapsed = 0; state.spawnElapsed = 0; state.savedMapId = null; state.previousMapId = null; state.townAutoReturn = false;
-  state.adventureStartedAt = null; state.claimedRewards = new Set();
+  state.adventureStartedAt = null; state.claimedRewards = new Set(); state.rewardGroupOpenState = {}; state.rewardView = "available";
   buildParty();
   const loaded = applyPlayerSave(saved);
   if (!loaded) { initializeStorageState(); grantInitialItems(); }
@@ -373,6 +377,21 @@ function rewardEligibility(row) {
   return Boolean(adventureDate && validRewardDate(row?.date) && adventureDate >= String(row.date));
 }
 
+function currentRewardIds() {
+  return new Set((state.data?.rewards ?? []).map((row) => String(row.reward_id ?? "").trim()).filter(Boolean));
+}
+
+function normalizeClaimedRewards(source) {
+  const currentIds = currentRewardIds();
+  return new Set((Array.isArray(source) ? source : []).map((value) => String(value).trim()).filter((rewardId) => rewardId && currentIds.has(rewardId)));
+}
+
+function normalizeRewardGroupOpenState(source) {
+  const currentDates = new Set((state.data?.rewards ?? []).map((row) => String(row.date ?? "")).filter(validRewardDate));
+  return Object.fromEntries(Object.entries(source && typeof source === "object" && !Array.isArray(source) ? source : {})
+    .filter(([date, open]) => currentDates.has(date) && typeof open === "boolean"));
+}
+
 function rewardValidation(row, logError = false) {
   const type = String(row?.type ?? "").trim();
   const rewardId = String(row?.reward_id ?? "").trim();
@@ -425,6 +444,40 @@ function rewardDisplayName(row, validation = rewardValidation(row)) {
   return validation.type === "gold" ? `金幣 x ${quantity}` : `${validation.name || row.id || "資料錯誤"} x ${quantity}`;
 }
 
+function eligibleRewardDateGroups() {
+  const groups = new Map();
+  (state.data?.rewards ?? []).forEach((row, sourceIndex) => {
+    if (!rewardEligibility(row)) return;
+    const date = String(row.date);
+    if (!groups.has(date)) groups.set(date, []);
+    groups.get(date).push({ row, sourceIndex });
+  });
+  return [...groups.entries()].sort(([left], [right]) => right.localeCompare(left)).map(([date, entries]) => {
+    const rows = entries.sort((left, right) => left.sourceIndex - right.sourceIndex);
+    const murmurs = rows.filter(({ row }) => String(row.type).trim() === "murmur").map(({ row }) => String(row.intro ?? "").trim()).filter(Boolean);
+    const rewards = rows.filter(({ row }) => CLAIMABLE_REWARD_TYPES.has(String(row.type).trim()));
+    const unsupported = rows.some(({ row }) => !["murmur", ...CLAIMABLE_REWARD_TYPES].includes(String(row.type).trim()));
+    const completed = rewards.length > 0 && !unsupported && rewards.every(({ row }) => state.claimedRewards.has(String(row.reward_id ?? "").trim()));
+    return { date, rows, rewards, murmurs, completed };
+  });
+}
+
+function renderRewardHistory(container, groups) {
+  const completedGroups = groups.filter((group) => group.completed);
+  for (const group of completedGroups) {
+    const section = document.createElement("section"); section.className = "reward-history-group";
+    const heading = document.createElement("h3"); heading.textContent = formatRewardDate(group.date); section.append(heading);
+    for (const murmur of group.murmurs) { const p = document.createElement("p"); p.className = "reward-murmur"; p.textContent = murmur; section.append(p); }
+    const list = document.createElement("ul"); list.className = "reward-history-list";
+    for (const { row } of group.rewards) {
+      const validation = rewardValidation(row);
+      const item = document.createElement("li"); item.textContent = validation.valid ? rewardDisplayName(row, validation) : `資料錯誤：${row.reward_id}`; list.append(item);
+    }
+    section.append(list); container.append(section);
+  }
+  if (!completedGroups.length) { const empty = document.createElement("p"); empty.className = "reward-murmur"; empty.textContent = "目前沒有已完整領取的 Reward 紀錄。"; container.append(empty); }
+}
+
 function renderRewardPanel() {
   const adventure = $("#reward-adventure-time");
   const container = $("#reward-groups");
@@ -433,12 +486,22 @@ function renderRewardPanel() {
     ? `開始冒險於 ${new Date(state.adventureStartedAt).toLocaleString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}`
     : "尚未建立冒險時間";
   container.replaceChildren();
-  const eligibleRows = (state.data.rewards ?? []).map((row, sourceIndex) => ({ row, sourceIndex })).filter(({ row }) => rewardEligibility(row));
-  const dates = [...new Set(eligibleRows.map(({ row }) => String(row.date)))].sort((a, b) => b.localeCompare(a));
-  for (const [dateIndex, date] of dates.entries()) {
-    const rows = eligibleRows.filter(({ row }) => String(row.date) === date).sort((a, b) => a.sourceIndex - b.sourceIndex);
-    const murmurs = rows.filter(({ row }) => String(row.type).trim() === "murmur").map(({ row }) => String(row.intro ?? "").trim()).filter(Boolean);
-    const details = document.createElement("details"); details.className = "reward-group"; details.open = dateIndex === 0;
+  const groups = eligibleRewardDateGroups();
+  const historyView = state.rewardView === "history";
+  const title = $("#reward-dialog-title"); const toggle = $("#reward-view-toggle");
+  if (title) title.textContent = historyView ? "Reward 紀錄" : "Reward 獎勵";
+  if (toggle) toggle.textContent = historyView ? "Reward獎勵" : "Reward紀錄";
+  if (historyView) { renderRewardHistory(container, groups); return; }
+  const availableGroups = groups.filter((group) => !group.completed);
+  for (const [dateIndex, group] of availableGroups.entries()) {
+    const { date, rows, murmurs } = group;
+    if (!Object.hasOwn(state.rewardGroupOpenState, date)) state.rewardGroupOpenState[date] = dateIndex === 0;
+    const details = document.createElement("details"); details.className = "reward-group"; details.open = state.rewardGroupOpenState[date]; details.dataset.rewardDate = date;
+    details.addEventListener("toggle", () => {
+      if (state.rewardGroupOpenState[date] === details.open) return;
+      state.rewardGroupOpenState[date] = details.open;
+      persistPlayerSave();
+    });
     const summary = document.createElement("summary"); summary.textContent = `${formatRewardDate(date)}${murmurs.length ? `  ${murmurs.join("／")}` : ""}`;
     const body = document.createElement("div"); body.className = "reward-group-body";
     for (const murmur of murmurs) { const p = document.createElement("p"); p.className = "reward-murmur"; p.textContent = murmur; body.append(p); }
@@ -455,7 +518,7 @@ function renderRewardPanel() {
     }
     details.append(summary, body); container.append(details);
   }
-  if (!dates.length) { const empty = document.createElement("p"); empty.className = "reward-murmur"; empty.textContent = "目前沒有符合開始冒險日期的獎勵。"; container.append(empty); }
+  if (!availableGroups.length) { const empty = document.createElement("p"); empty.className = "reward-murmur"; empty.textContent = "目前沒有尚待領取的 Reward。"; container.append(empty); }
 }
 
 function rewardHasInventoryCapacity(validation) {
@@ -494,7 +557,8 @@ async function claimReward(rewardId) {
 
 function setupRewardPanel() {
   const dialog = $("#reward-dialog");
-  $("#reward-button").addEventListener("click", () => { renderRewardPanel(); $("#reward-message").textContent = ""; dialog.showModal(); });
+  $("#reward-button").addEventListener("click", () => { state.rewardView = "available"; renderRewardPanel(); $("#reward-message").textContent = ""; dialog.showModal(); });
+  $("#reward-view-toggle").addEventListener("click", () => { state.rewardView = state.rewardView === "history" ? "available" : "history"; renderRewardPanel(); $("#reward-message").textContent = ""; });
   $("#reward-close").addEventListener("click", () => dialog.close());
   $("#reward-groups").addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-reward-id]");
@@ -1735,6 +1799,7 @@ async function startNewGameInSlot(slotId) {
     resetRuntimeFromSave(null);
     state.adventureStartedAt = new Date().toISOString();
     state.claimedRewards = new Set();
+    state.rewardGroupOpenState = {};
     await DreamerSaveManager.setActiveSlot(slotId);
     state.currentSlot = slotId;
     try { await persistPlayerSave(false, true); }

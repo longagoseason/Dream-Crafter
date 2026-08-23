@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dreamer · 三人隊伍放置 RPG</title>
   <link rel="icon" type="image/png" href="./assets/images/Dreamer_logo.png">
-  <link rel="stylesheet" href="./style.css?v=20260822-hybrid-reward">
+  <link rel="stylesheet" href="./style.css?v=20260823-reward-history">
 </head>
 <body>
   <main class="game-layout">
@@ -112,7 +112,7 @@
     <div id="welcome-lines" class="welcome-lines"></div>
   </dialog>
   <dialog id="reward-dialog" class="welcome-dialog reward-dialog">
-    <div class="dialog-title"><strong>Reward 獎勵</strong><button id="reward-close" type="button" aria-label="關閉">×</button></div>
+    <div class="dialog-title"><strong id="reward-dialog-title">Reward 獎勵</strong><span class="reward-dialog-actions"><button id="reward-view-toggle" type="button">Reward紀錄</button><button id="reward-close" type="button" aria-label="關閉">×</button></span></div>
     <div class="reward-content">
       <p id="reward-adventure-time" class="reward-adventure-time"></p>
       <div id="reward-groups" class="reward-groups"></div>
@@ -280,6 +280,6 @@
   <script src="./csvLoader.js?v=20260817-status-effects"></script>
   <script src="./runtimePlatform.js?v=20260811-csv-no-store"></script>
   <script src="./saveManager.js?v=20260812-save-slots"></script>
-  <script src="./game.js?v=20260822-trigger-condition"></script>
+  <script src="./game.js?v=20260823-reward-history"></script>
 </body>
 </html>
