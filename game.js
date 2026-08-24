@@ -623,10 +623,21 @@ function multipliedExperienceReward(penalizedExperience) {
   return Math.max(0, Math.round(Number(penalizedExperience) * systemSettings().exp_multiplier));
 }
 
-function calculatedItemDropRate(baseDropRate, totalLuck, levelDifference) {
-  const multipliedBaseRate = Math.min(100, Number(baseDropRate) * systemSettings().item_drop_rate);
-  const luckyRate = Math.min(100, multipliedBaseRate * (1 + Math.max(0, totalLuck) / 100));
-  return Math.min(100, Math.max(multipliedBaseRate * .2, luckyRate * (1 - (Math.max(levelDifference, 3) - 3) * .1)));
+function calculatedItemDropRate(baseDropRate, levelDifference) {
+  const multipliedBaseRate = clamp(Number(baseDropRate) * Number(systemSettings().item_drop_rate ?? 1), 0, 100);
+  return clamp(Math.max(multipliedBaseRate * .2, multipliedBaseRate * (1 - (Math.max(levelDifference, 3) - 3) * .1)), 0, 100);
+}
+
+function rollDropWithLuck(dropRate, partyLuck, random = Math.random) {
+  const rate = clamp(Number(dropRate) || 0, 0, 100);
+  if (random() * 100 < rate) return true;
+  const luck = Math.max(0, Number(partyLuck) || 0);
+  const guaranteedRerolls = Math.floor(luck / 100);
+  for (let index = 0; index < guaranteedRerolls; index += 1) {
+    if (random() * 100 < rate) return true;
+  }
+  const remainderChance = luck % 100;
+  return remainderChance > 0 && random() * 100 < remainderChance && random() * 100 < rate;
 }
 
 function setupEquipmentPanel() {
@@ -4661,6 +4672,17 @@ function rollDrops(enemy) {
   const avgLevel = state.party.reduce((s, p) => s + p.level, 0) / state.party.length;
   const totalLuck = state.party.reduce((sum, hero) => sum + Number(combatStat(hero, "LUK")), 0);
   const levelDiff = Math.round((avgLevel - enemy.level) * 10) / 10;
+  const successfulDrops = [];
+  const rollEntries = (entries, multiplier, sourceLabel) => {
+    for (const drop of entries) {
+      const poolRate = clamp(Number(drop.base_drop_rate) * multiplier, 0, 100);
+      const rate = calculatedItemDropRate(poolRate, levelDiff);
+      if (!rollDropWithLuck(rate, totalLuck)) continue;
+      const quantity = randomInt(drop.quantity_min, drop.quantity_max);
+      receiveDrop(drop, quantity, enemy.name);
+      successfulDrops.push({ source: sourceLabel, itemId: drop.item_id, quantity, rate });
+    }
+  };
   const rollLootTable = (lootId, rawMultiplier, label) => {
     if (!lootId) return;
     const multiplier = Number(rawMultiplier);
@@ -4672,18 +4694,12 @@ function rollDrops(enemy) {
       }
       return;
     }
-    for (const drop of state.data.lootDrops.filter((row) => row.loot_id === lootId)) {
-      const rate = calculatedItemDropRate(drop.base_drop_rate * multiplier, totalLuck, levelDiff);
-      if (Math.random() * 100 < rate) receiveDrop(drop, randomInt(drop.quantity_min, drop.quantity_max), enemy.name);
-    }
+    rollEntries(state.data.lootDrops.filter((row) => row.loot_id === lootId), multiplier, label);
   };
   rollLootTable(enemy.loot_id, enemy.loot_multiplier, "loot");
   rollLootTable(enemy.loot2_id, enemy.loot2_multiplier, "loot2");
-  const specialDrops = state.data.specialLoot.filter((row) => row.monster_id === enemy.monster_id);
-  for (const drop of specialDrops) {
-    const rate = calculatedItemDropRate(drop.base_drop_rate, totalLuck, levelDiff);
-    if (Math.random() * 100 < rate) receiveDrop(drop, randomInt(drop.quantity_min, drop.quantity_max), enemy.name);
-  }
+  rollEntries(state.data.specialLoot.filter((row) => row.monster_id === enemy.monster_id), 1, "special");
+  return successfulDrops;
 }
 
 function receiveDrop(drop, quantity, source) {

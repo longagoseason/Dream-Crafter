@@ -1,5 +1,5 @@
 monster_id,name,category,level,HP,HPR,AC,MR,ATK,MATK,AAR,SAR,ADAM,MDAM,attack_type,attack_speed,ASPD,gold_min,gold_max,loot_id,loot_multiplier,loot2_id,loot2_multiplier
-mon999,夏憶雪,normal,80,9527,1,1,1,1,1,1,1,1,1,melee,1,0,9527,9527,Drop_000,1,,
+mon999,夏憶雪,normal,80,9527,1,1,1,1,1,1,1,1,1,melee,1,0,9527,9527,Drop_000,2,Drop_999,1
 mon998,玖玖巴,boss,80,9998,1,1,1,100,100,1,1,1,1,magic,1,0,998,998,Drop_000,1,,
 mon001,小史萊姆,normal,1,66,0,3,3,2,5,10,0,0,0,melee,0.7,0,20,38,Drop_001,1,,
 mon002,大史萊姆,normal,3,155,0,12,12,10,10,10,0,0,0,melee,0.7,0,70,113,Drop_001,1,,
