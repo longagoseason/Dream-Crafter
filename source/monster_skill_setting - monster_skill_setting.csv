@@ -10,7 +10,7 @@ sk006,酸液噴射,magic,aoe,15,100,1,DOT,enemy_aoe,50%,10,,,,
 sk007,火球,magic,aoe,50,200,1,,,,,,,,
 sk008,冰箭,magic,random,50,200,1,MR,DMGchoose,-30,5,ASPD,DMGchoose,-50,5
 sk009,落雷,magic,random,50,175,1,DMG,random,,,DMG,random,,
-sk010,國王之劍,physical,front,100,200,0,ADAM,ally_aoe,50,10,,ASPD,100,5
+sk010,國王之劍,physical,front,50,200,0,ADAM,self,20,5,,ASPD,100,5
 sk011,聖療術,buff,none,0,0,1,HPR,ally_aoe,250,5,,,,
 sk012,守護之心,buff,none,0,0,2,MR,ally_aoe,50,20,AC,ally_aoe,50,20
 sk013,戰鬥法陣,buff,none,0,0,2,MDAM,ally_aoe,50,20,ADAM,ally_aoe,50,20
