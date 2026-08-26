@@ -377,7 +377,7 @@ function formatRewardDate(value) {
 
 function rewardEligibility(row) {
   const adventureDate = localDateKey(state.adventureStartedAt);
-  return Boolean(adventureDate && validRewardDate(row?.date) && adventureDate >= String(row.date));
+  return Boolean(adventureDate && validRewardDate(row?.date) && adventureDate <= String(row.date));
 }
 
 function buildRewardCatalog() {
@@ -1913,7 +1913,6 @@ function setupSaveManagerPanel() {
       await runSaveTransition(async () => {
         if (state.currentSlot) await persistPlayerSave(false, true);
         const working = await DreamerSaveManager.importToImported(imported);
-        working.adventure_started_at = new Date().toISOString();
         await DreamerSaveManager.setActiveSlot("imported");
         state.currentSlot = "imported";
         resetRuntimeFromSave(working);
@@ -4031,6 +4030,25 @@ function scaledConfiguredEffectValue(caster, skill, effect) {
   return { ...parsed, value, sign, scaling, raw: parsed.percentage ? `${value}%` : String(value) };
 }
 
+function configuredDmgEffectMultiplier(caster, skill, effect, allowAttributeScaling = false) {
+  const raw = String(effect.value ?? "").trim();
+  let basePercent = 100;
+  if (raw) {
+    const match = raw.match(/^\+?(\d+(?:\.\d*)?|\.\d+)%$/);
+    if (!match || !Number.isFinite(Number(match[1]))) {
+      const warningKey = `invalid-dmg-effect:${skill?.skill_id ?? skill?.name ?? "unknown"}:${effect.index}:${raw}`;
+      if (!runtimeWarningKeys.has(warningKey)) {
+        runtimeWarningKeys.add(warningKey);
+        console.warn(`[WARN] skill ${skill?.skill_id ?? skill?.name ?? "unknown"} effect${effect.index} DMG value must be blank or a non-negative percentage: ${raw}.`);
+      }
+      return null;
+    }
+    basePercent = Number(match[1]);
+  }
+  const attributeBonusPercent = allowAttributeScaling ? effectAttributeExpressionResult(caster, skill, effect).bonus : 0;
+  return roundSigned((basePercent + attributeBonusPercent) / 100);
+}
+
 function parseDotEffectValue(rawValue, skill = {}, effect = {}) {
   const raw = String(rawValue ?? "").trim();
   const percentage = raw.endsWith("%");
@@ -4233,10 +4251,11 @@ function executeSkillDamageComponent(caster, target, skill, context = {}) {
   if (!target || target.hp <= 0 || !["physical", "magic", "hybrid"].includes(skill.damage_type)) return { hit: false };
   const avoidance = rollConfiguredAttackAvoidance(caster, target, skill.damage_type);
   if (avoidance.dodged) {
-    addLog(`${caster.name} 的 ${skill.name} 被 ${target.name} ${avoidance.reason}。`, { channel: context.channel, skillName: skill.name, skillColor: context.skillColor });
+    addLog(`${caster.name} 的 ${skill.name} 被 ${target.name} 閃避。`, { channel: context.channel, skillName: skill.name, skillColor: context.skillColor });
     return { hit: false, dodged: true, target };
   }
-  const result = calculateAttackDamage(caster, target, skill.damage_type, context.baseDamage ?? skill.base_damage, skill.multiplier / 100, Math.random, configuredArmorRate());
+  const componentMultiplier = Number.isFinite(Number(context.damageComponentMultiplier)) ? Number(context.damageComponentMultiplier) : 1;
+  const result = calculateAttackDamage(caster, target, skill.damage_type, context.baseDamage ?? skill.base_damage, skill.multiplier / 100 * componentMultiplier, Math.random, configuredArmorRate());
   const hpBefore = Math.max(0, Number(target.hp) || 0);
   target.hp = round(target.hp - result.damage);
   // Leech is based on HP that was actually removed; overkill damage cannot be absorbed.
@@ -4276,8 +4295,10 @@ function applyDirectResourceEffect(caster, skill, effect, target, value, context
 function applyConfiguredSkillEffects(caster, skill, context) {
   for (const effect of configuredSkillEffects(skill)) {
     if (effect.stat === "DMG") {
+      const damageComponentMultiplier = configuredDmgEffectMultiplier(caster, skill, effect, context.channel === "player");
+      if (damageComponentMultiplier === null) continue;
       const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
-      for (const target of targets) executeSkillDamageComponent(caster, target, skill, context);
+      for (const target of targets) executeSkillDamageComponent(caster, target, skill, { ...context, damageComponentMultiplier });
       continue;
     }
     if (["HPleech", "MPleech"].includes(effect.stat)) {
@@ -4530,7 +4551,7 @@ function playerAttack(actor, enemy) {
   const isMagic = actor.attackType === "magic";
   const damageType = isMagic ? "magic" : "physical";
   const avoidance = rollConfiguredAttackAvoidance(actor, enemy, damageType);
-  if (avoidance.dodged) { addLog(`${actor.name} 的攻擊被 ${enemy.name} ${avoidance.reason}。`, { channel: "player" }); return; }
+  if (avoidance.dodged) { addLog(`${actor.name} 的攻擊被 ${enemy.name} 閃避。`, { channel: "player" }); return; }
   const result = calculateAttackDamage(actor, enemy, damageType, 0, 1, Math.random, configuredArmorRate());
   enemy.hp = round(enemy.hp - result.damage); addLog(`${actor.name} 對 ${enemy.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
     { channel: "player", critical: result.critical.isCritical, damage: result.damage });
@@ -4540,7 +4561,7 @@ function playerAttack(actor, enemy) {
 function monsterAttack(enemy, target) {
   const damageType = enemy.attack_type === "magic" ? "magic" : enemy.attack_type === "hybrid" ? "hybrid" : "physical";
   const avoidance = rollConfiguredAttackAvoidance(enemy, target, damageType);
-  if (avoidance.dodged) { addLog(`${enemy.name} 的攻擊被 ${target.name} ${avoidance.reason}。`, { channel: "monster" }); return; }
+  if (avoidance.dodged) { addLog(`${enemy.name} 的攻擊被 ${target.name} 閃避。`, { channel: "monster" }); return; }
   const basicSkill = damageType === "hybrid"
     ? state.data.skill.find((skill) => skill.damage_type === "hybrid" && skill.name === "普通攻擊")
     : state.data.skill.find((skill) => skill.skill_id === (damageType === "magic" ? "sk002" : "sk001"));

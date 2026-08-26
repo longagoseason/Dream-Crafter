@@ -115,6 +115,13 @@
           throw new CsvLoadError(`CSV validation failed: ${entry.file} row ${rowIndex + 1}, ${required} is empty`, { path: entry.file, row: rowIndex + 1, column: required });
         }
       }
+      for (const effectNumber of [1, 2]) {
+        if (record[`effect${effectNumber}`] !== "DMG") continue;
+        const value = record[`effect${effectNumber}_value`];
+        if (value !== null && value !== undefined && !/^\+?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(String(value).trim())) {
+          throw new CsvLoadError(`CSV validation failed: ${entry.file} row ${rowIndex + 1}, effect${effectNumber}_value for DMG must be blank or a non-negative percentage`, { path: entry.file, row: rowIndex + 1, column: `effect${effectNumber}_value` });
+        }
+      }
       for (const [fieldName, value] of Object.entries(record)) {
         const colorField = (entry.logicalFile === "Game_color_index.csv" && fieldName === "color_name")
           || /(?:^|_)(?:color|shading)$|^flash_name$/i.test(fieldName);
