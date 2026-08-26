@@ -30,13 +30,13 @@ eq0056,預見Ａ 破魔劍,500,hybrid_weapon,two_hand_weapon,spellblade,mageslay
 eq0081,史萊姆 核心,500,core,,all,core.png,#FFFF00,5,,,,,,,5,5,,,100,0.5,100,0.5,1,1,1,1,1,1
 eq0082,利姆露 玩偶,500,idol,,all,idol.png,#FFFF00,5,2,2,2,50,2,2,,,,,,,,,,,,,,
 eq0083,利姆露 耳環,1000,earrings,,all,earrings.png,#FFFF00,10,,,,,,,,,,,,1,,0.3,,1,,1,,
-eq0084,利姆露 王冠,1000,helmet,,all,helmet.png,#FFFF00,10,,,,,,,6,6,,,,1,,0.3,1,1,1,1,1,1
+eq0084,利姆露 王冠,1000,helmet,,all,helmet.png,#FFFF00,10,,,,,,,5,5,,,,1,,0.3,1,1,1,1,1,1
 eq0085,利姆露 皇后之翼,1000,necklace,,all,necklace.png,#FFFF00,10,,,,,2,2,,,,,,1,,0.3,1,1,1,1,1,1
-eq0101,Ａ 胸甲,1000,body,,all,body.png,#A0A0A0,10,,,,,,,6,6,,,,,,,,,,,,
-eq0102,Ａ 頭盔,1000,helmet,,all,helmet.png,#A0A0A0,10,,,,,,,6,6,,,,,,,,,,,,
-eq0103,Ａ 盾牌,1000,shield,,all,shield.png,#A0A0A0,10,,,,,,,6,6,,,,,,,,,,,,
+eq0101,Ａ 胸甲,1000,body,,all,body.png,#A0A0A0,10,,,,,,,5,5,,,,,,,,,,,,
+eq0102,Ａ 頭盔,1000,helmet,,all,helmet.png,#A0A0A0,10,,,,,,,5,5,,,,,,,,,,,,
+eq0103,Ａ 盾牌,1000,shield,,all,shield.png,#A0A0A0,10,,,,,,,5,5,,,,,,,,,,,,
 eq0104,Ａ 手套,1000,gloves,,all,gloves.png,#A0A0A0,10,,,,,,,,,4,4,,,,,,,,,,
-eq0105,Ａ 長靴,1000,shoe,,all,shoe.png,#A0A0A0,10,,,,,,,6,6,,,,,,,,,,,,
+eq0105,Ａ 長靴,1000,shoe,,all,shoe.png,#A0A0A0,10,,,,,,,5,5,,,,,,,,,,,,
 eq0106,Ａ 護膝,1000,kneepads,,all,kneepads.png,#A0A0A0,10,,,,,,,,,4,4,,,,,,,,,,
 eq0107,Ａ 戒指,1000,ring,,all,ring.png,#A0A0A0,10,,,,,,,2,2,,,,,,,,,,,,
 eq0108,Ａ 耳環,1000,earrings,,all,earrings.png,#A0A0A0,10,,,,,,,,,,,20,,20,,,,,,,
@@ -58,7 +58,7 @@ eq0138,Cv.2 精智戒指,1500,ring,,all,ring.png,#99FF99,20,,,,,,,,,,,,,,,,,4,4,
 eq0139,Cv.2 敏幸戒指,1500,ring,,all,ring.png,#99FF99,20,,,,,,,,,,,,,,,,,,,4,4
 eq0140,Cv.2 生靈耳環,1500,earrings,,all,earrings.png,#99FF99,20,,,,,,,,,,,20,0.5,20,0.1,,,,,,
 eq0151,預見Ｂ 長劍,1500,physical_weapon,one_hand_weapon,warrior|thief|spellblade,sword.png,#99FF99,15,20,,,,,,,,,,,,,,3,,,,,1
-eq0152,預見Ｂ 法杖,1500,magic_weapon,two_hand_weapon,mage|priest,wand.png,#99FF99,15,,20,,,,,,,,,,10,10,,,,1,3,,
+eq0152,預見Ｂ 法杖,1500,magic_weapon,two_hand_weapon,mage|priest,wand.png,#99FF99,15,,20,,,,,,,,,20,,20,0.3,,,1,3,,
 eq0153,預見Ｂ 拳套,1500,physical_weapon,Dual_wielding,martial,knuckles.png,#99FF99,15,20,,,,7,,,,,,,,,,2,2,,,,
 eq0154,預見Ｂ 魔法球,1500,magic_weapon,two_hand_weapon,mage,magicball.png,#99FF99,15,,20,2,,,,,,,,,,,,,,3,1,,
 eq0155,預見Ｂ 匕首,1500,physical_weapon,one_hand_weapon,thief,knife.png,#99FF99,15,20,,3,20,,,,,,,,,,,,,,,2,2
