@@ -16,8 +16,8 @@ mon009,史萊姆國王,5,sk010,國王之劍,10,0,5,always,#CC6600
 mon009,史萊姆國王,6,sk005,堅固防禦,60,1,6,always,#FFFF99
 mon009,史萊姆國王,9,sk003,撞擊,2,0,9,always,#CC6600
 mon010,史萊姆皇后,3,sk011,聖療術,15,0,3,ally_HP_below_50,#00FF00
-mon010,史萊姆皇后,4,sk012,守護之心,20,0,4,always,#FFFF99
-mon010,史萊姆皇后,5,sk013,戰鬥法陣,20,0,5,always,#FFFF99
+mon010,史萊姆皇后,4,sk012,守護之心,30,0,4,always,#FFFF99
+mon010,史萊姆皇后,5,sk013,戰鬥法陣,30,0,5,always,#FFFF99
 mon010,史萊姆皇后,6,sk014,偷襲,10,0,6,enemy_HP_below_50,#FF0000
 mon011,小哥布林,10,sk015,刺擊,5,0,10,always,#CC6600
 mon011,小哥布林,8,sk016,放血,10,1,8,always,#CC6600
