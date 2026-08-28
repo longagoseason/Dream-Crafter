@@ -1,0 +1,903 @@
+{
+  "version": 1,
+  "generatedAt": "2026-08-28T09:22:04.908Z",
+  "numberFields": [
+    "AAR",
+    "AC",
+    "ADAM",
+    "ASPD",
+    "ATK",
+    "CON",
+    "CRI",
+    "CRI_DMG",
+    "DEX",
+    "Death_EXP_Penalty",
+    "Enhance_max",
+    "Enhance_min",
+    "HP",
+    "HPR",
+    "INT",
+    "LUK",
+    "MATK",
+    "MDAM",
+    "MP",
+    "MPR",
+    "MR",
+    "SAR",
+    "STR",
+    "WIS",
+    "attack_speed",
+    "base_AAR",
+    "base_AC",
+    "base_ADAM",
+    "base_ATK",
+    "base_CRI",
+    "base_CRI_DMG",
+    "base_HP",
+    "base_HPR",
+    "base_MATK",
+    "base_MDAM",
+    "base_MP",
+    "base_MPR",
+    "base_MR",
+    "base_SAR",
+    "base_damage",
+    "base_drop_rate",
+    "base_enhance_cost",
+    "bless_affixes",
+    "buy_gold",
+    "buy_level",
+    "cast_time",
+    "cooldown",
+    "cost",
+    "curse_affixes",
+    "effect1_multi",
+    "effect1_sec",
+    "effect2_multi",
+    "effect2_sec",
+    "effect_value_max",
+    "effect_value_min",
+    "enhance_buff",
+    "enhance_level",
+    "exp_multiplier",
+    "gold_max",
+    "gold_min",
+    "gold_multiplier",
+    "initial_delay",
+    "initial_item_value",
+    "is_flashing",
+    "item_drop_rate",
+    "item_level",
+    "level",
+    "loot_multiplier",
+    "max_monsters",
+    "min_targets",
+    "multiplier",
+    "over_att_num",
+    "quantity_max",
+    "quantity_min",
+    "recover_rate",
+    "required_exp",
+    "sell_gold",
+    "skill_order",
+    "spawn_cd",
+    "spawn_rate",
+    "star_count",
+    "success_rate",
+    "total_exp",
+    "town_recover",
+    "trigger_value",
+    "unlock_level",
+    "use_priority",
+    "welcome_pt"
+  ],
+  "booleanFields": [
+    "Recursive",
+    "enabled",
+    "is_Bold",
+    "is_book"
+  ],
+  "enhancementStats": [
+    "ATK",
+    "MATK",
+    "CRI",
+    "CRI_DMG",
+    "AC",
+    "MR",
+    "AAR",
+    "SAR",
+    "HP",
+    "HPR",
+    "MP",
+    "MPR",
+    "ADAM",
+    "MDAM",
+    "STR",
+    "CON",
+    "INT",
+    "WIS",
+    "DEX",
+    "LUK"
+  ],
+  "csvFiles": [
+    {
+      "file": "Dreamer_Syetem - Dreamer_Syetem.csv",
+      "logicalFile": "Dreamer_Syetem.csv",
+      "table": "dreamerSystem",
+      "required": [
+        "exp_multiplier",
+        "gold_multiplier",
+        "item_drop_rate",
+        "base_enhance_cost",
+        "recover_rate",
+        "town_recover",
+        "Homepage_title",
+        "Death_EXP_Penalty"
+      ],
+      "expectedHeaders": [
+        "Homepage_title",
+        "exp_multiplier",
+        "gold_multiplier",
+        "item_drop_rate",
+        "base_enhance_cost",
+        "recover_rate",
+        "town_recover",
+        "Death_EXP_Penalty",
+        "mid_fig_size",
+        "AAR_SAR_max",
+        "armor_rate"
+      ],
+      "id": []
+    },
+    {
+      "file": "Drop_loot_id - Drop_loot_id.csv",
+      "logicalFile": "Drop_loot_id.csv",
+      "table": "lootDrops",
+      "required": [
+        "loot_id",
+        "item_id",
+        "item_name",
+        "base_drop_rate",
+        "quantity_min",
+        "quantity_max"
+      ],
+      "expectedHeaders": [
+        "loot_id",
+        "item_id",
+        "item_name",
+        "base_drop_rate",
+        "quantity_min",
+        "quantity_max"
+      ],
+      "id": [
+        "loot_id",
+        "item_id"
+      ]
+    },
+    {
+      "file": "Drop_special_loot - Drop_special_loot.csv",
+      "logicalFile": "Drop_special_loot.csv",
+      "table": "specialLoot",
+      "required": [
+        "monster_id",
+        "name",
+        "item_id",
+        "item_name",
+        "base_drop_rate",
+        "quantity_min",
+        "quantity_max"
+      ],
+      "expectedHeaders": [
+        "monster_id",
+        "name",
+        "item_id",
+        "item_name",
+        "base_drop_rate",
+        "quantity_min",
+        "quantity_max"
+      ],
+      "id": [
+        "monster_id",
+        "item_id"
+      ]
+    },
+    {
+      "file": "Enhance_ChaosEnchant - Enhance_ChaosEnchant.csv",
+      "logicalFile": "Enhance_ChaosEnchant.csv",
+      "table": "enhanceChaosEnchant",
+      "required": [
+        "position",
+        "ATK",
+        "MATK",
+        "CRI",
+        "CRI_DMG",
+        "AC",
+        "MR",
+        "AAR",
+        "SAR",
+        "HP",
+        "HPR",
+        "MP",
+        "MPR",
+        "ADAM",
+        "MDAM",
+        "STR",
+        "CON",
+        "INT",
+        "WIS",
+        "DEX",
+        "LUK"
+      ],
+      "expectedHeaders": [
+        "position",
+        "ATK",
+        "MATK",
+        "CRI",
+        "CRI_DMG",
+        "AC",
+        "MR",
+        "AAR",
+        "SAR",
+        "HP",
+        "HPR",
+        "MP",
+        "MPR",
+        "ADAM",
+        "MDAM",
+        "STR",
+        "CON",
+        "INT",
+        "WIS",
+        "DEX",
+        "LUK"
+      ],
+      "id": [
+        "position"
+      ]
+    },
+    {
+      "file": "Enhance_OverEnchant - Enhance_OverEnchant.csv",
+      "logicalFile": "Enhance_OverEnchant.csv",
+      "table": "enhanceOverEnchant",
+      "required": [
+        "position",
+        "ATK",
+        "MATK",
+        "CRI",
+        "CRI_DMG",
+        "AC",
+        "MR",
+        "AAR",
+        "SAR",
+        "HP",
+        "HPR",
+        "MP",
+        "MPR",
+        "ADAM",
+        "MDAM",
+        "STR",
+        "CON",
+        "INT",
+        "WIS",
+        "DEX",
+        "LUK"
+      ],
+      "expectedHeaders": [
+        "position",
+        "ATK",
+        "MATK",
+        "CRI",
+        "CRI_DMG",
+        "AC",
+        "MR",
+        "AAR",
+        "SAR",
+        "HP",
+        "HPR",
+        "MP",
+        "MPR",
+        "ADAM",
+        "MDAM",
+        "STR",
+        "CON",
+        "INT",
+        "WIS",
+        "DEX",
+        "LUK"
+      ],
+      "id": [
+        "position"
+      ]
+    },
+    {
+      "file": "Enhance_SaveEnchant - Enhance_SaveEnchant.csv",
+      "logicalFile": "Enhance_SaveEnchant.csv",
+      "table": "enhanceSaveEnchant",
+      "required": [
+        "position",
+        "ATK",
+        "MATK",
+        "CRI",
+        "CRI_DMG",
+        "AC",
+        "MR",
+        "AAR",
+        "SAR",
+        "HP",
+        "HPR",
+        "MP",
+        "MPR",
+        "ADAM",
+        "MDAM",
+        "STR",
+        "CON",
+        "INT",
+        "WIS",
+        "DEX",
+        "LUK"
+      ],
+      "expectedHeaders": [
+        "position",
+        "ATK",
+        "MATK",
+        "CRI",
+        "CRI_DMG",
+        "AC",
+        "MR",
+        "AAR",
+        "SAR",
+        "HP",
+        "HPR",
+        "MP",
+        "MPR",
+        "ADAM",
+        "MDAM",
+        "STR",
+        "CON",
+        "INT",
+        "WIS",
+        "DEX",
+        "LUK"
+      ],
+      "id": [
+        "position"
+      ]
+    },
+    {
+      "file": "Enhance_level - Enhance_level.csv",
+      "logicalFile": "Enhance_level.csv",
+      "table": "enhanceLevel",
+      "required": [
+        "enhance_level",
+        "success_rate",
+        "enhance_color",
+        "bless_affixes",
+        "curse_affixes",
+        "enabled",
+        "is_flashing",
+        "flash_shading",
+        "flash_mid_shading",
+        "flash_name",
+        "star_count",
+        "star_color",
+        "enhance_buff"
+      ],
+      "expectedHeaders": [
+        "enhance_level",
+        "success_rate",
+        "enhance_color",
+        "bless_affixes",
+        "curse_affixes",
+        "enabled",
+        "is_flashing",
+        "flash_shading",
+        "flash_mid_shading",
+        "flash_name",
+        "star_count",
+        "star_color",
+        "enhance_buff"
+      ],
+      "id": [
+        "enhance_level"
+      ]
+    },
+    {
+      "file": "Game_color_index - Game_color_index.csv",
+      "logicalFile": "Game_color_index.csv",
+      "table": "gameColorIndex",
+      "required": [
+        "color_location",
+        "color_name",
+        "color_index"
+      ],
+      "expectedHeaders": [
+        "color_location",
+        "color_name",
+        "color_index"
+      ],
+      "id": [
+        "color_location"
+      ]
+    },
+    {
+      "file": "PatchNote - PatchNote.csv",
+      "logicalFile": "PatchNote.csv",
+      "table": "patchNotes",
+      "required": [
+        "version",
+        "type",
+        "patch_note"
+      ],
+      "expectedHeaders": [
+        "version",
+        "type",
+        "patch_note"
+      ],
+      "id": []
+    },
+    {
+      "file": "Reward - Reward.csv",
+      "logicalFile": "Reward.csv",
+      "table": "rewards",
+      "required": [
+        "reward_id",
+        "date",
+        "type"
+      ],
+      "expectedHeaders": [
+        "reward_id",
+        "date",
+        "type",
+        "id",
+        "value",
+        "intro"
+      ],
+      "id": [
+        "reward_id"
+      ]
+    },
+    {
+      "file": "Welcome_news - Welcome_news.csv",
+      "logicalFile": "Welcome_news.csv",
+      "table": "welcomeNews",
+      "required": [
+        "welcome_color",
+        "welcome_pt",
+        "is_Bold",
+        "welcome_name"
+      ],
+      "expectedHeaders": [
+        "welcome_color",
+        "welcome_pt",
+        "is_Bold",
+        "welcome_name"
+      ],
+      "id": []
+    },
+    {
+      "file": "character_Attribute - character_Attribute.csv",
+      "logicalFile": "character_Attribute.csv",
+      "table": "characterAttribute",
+      "required": [
+        "Attribute"
+      ],
+      "expectedHeaders": [
+        "Attribute",
+        "ATK",
+        "MATK",
+        "CRI",
+        "CRI_DMG",
+        "AC",
+        "MR",
+        "AAR",
+        "SAR",
+        "HP",
+        "HPR",
+        "MP",
+        "MPR",
+        "ADAM",
+        "MDAM",
+        "Enhance_Attribute",
+        "Enhance_min",
+        "Enhance_max",
+        "over_att_num",
+        "Recursive",
+        "over_effect",
+        "overvalue"
+      ],
+      "id": [
+        "Attribute"
+      ]
+    },
+    {
+      "file": "character_skills - character_skills.csv",
+      "logicalFile": "character_skills.csv",
+      "table": "characterSkills",
+      "required": [
+        "class_id",
+        "skill_id",
+        "name",
+        "level",
+        "cost",
+        "cooldown",
+        "skill_color",
+        "damage_type",
+        "damage_target",
+        "multiplier",
+        "cast_time",
+        "is_book",
+        "enabled",
+        "use_priority"
+      ],
+      "expectedHeaders": [
+        "class_id",
+        "name",
+        "skill_id",
+        "level",
+        "cost",
+        "cooldown",
+        "skill_color",
+        "damage_type",
+        "damage_target",
+        "base_damage",
+        "multiplier",
+        "cast_time",
+        "is_book",
+        "effect1",
+        "effect1_target",
+        "effect1_value",
+        "effect1_sec",
+        "effect1_Attribute",
+        "effect1_multi",
+        "effect2",
+        "effect2_target",
+        "effect2_value",
+        "effect2_sec",
+        "effect2_Attribute",
+        "effect2_multi",
+        "enabled",
+        "use_priority",
+        "trigger_type",
+        "trigger_value",
+        "min_targets",
+        "skill_intro"
+      ],
+      "id": [
+        "class_id",
+        "skill_id"
+      ]
+    },
+    {
+      "file": "classes - classes.csv",
+      "logicalFile": "classes.csv",
+      "table": "classes",
+      "required": [
+        "class_id",
+        "class_name",
+        "base_ATK",
+        "base_MATK",
+        "base_CRI",
+        "base_CRI_DMG",
+        "base_AC",
+        "base_MR",
+        "base_AAR",
+        "base_SAR",
+        "base_HP",
+        "base_HPR",
+        "base_MP",
+        "base_MPR",
+        "base_ADAM",
+        "base_MDAM",
+        "STR",
+        "CON",
+        "INT",
+        "WIS",
+        "DEX",
+        "LUK"
+      ],
+      "expectedHeaders": [
+        "class_id",
+        "class_name",
+        "base_ATK",
+        "base_MATK",
+        "base_CRI",
+        "base_CRI_DMG",
+        "base_AC",
+        "base_MR",
+        "base_AAR",
+        "base_SAR",
+        "base_HP",
+        "base_HPR",
+        "base_MP",
+        "base_MPR",
+        "base_ADAM",
+        "base_MDAM",
+        "STR",
+        "CON",
+        "INT",
+        "WIS",
+        "DEX",
+        "LUK"
+      ],
+      "id": [
+        "class_id"
+      ]
+    },
+    {
+      "file": "equipment - equipment.csv",
+      "logicalFile": "equipment.csv",
+      "table": "equipment",
+      "required": [
+        "item_id",
+        "sell_gold",
+        "item_name",
+        "EQ_position",
+        "allowed_class",
+        "item_level"
+      ],
+      "expectedHeaders": [
+        "item_id",
+        "item_name",
+        "sell_gold",
+        "EQ_position",
+        "weapon_type",
+        "allowed_class",
+        "mid_figure",
+        "mid_fig_color",
+        "item_level",
+        "ATK",
+        "MATK",
+        "CRI",
+        "CRI_DMG",
+        "AC",
+        "MR",
+        "AAR",
+        "SAR",
+        "HP",
+        "HPR",
+        "MP",
+        "MPR",
+        "ADAM",
+        "MDAM",
+        "STR",
+        "CON",
+        "INT",
+        "WIS",
+        "DEX",
+        "LUK"
+      ],
+      "id": [
+        "item_id"
+      ]
+    },
+    {
+      "file": "index_Attribute - index_Attribute.csv",
+      "logicalFile": "index_Attribute.csv",
+      "table": "attributeIndex",
+      "required": [
+        "Attribute",
+        "name_Attribute",
+        "document_Attribute"
+      ],
+      "expectedHeaders": [
+        "Attribute",
+        "name_Attribute",
+        "document_Attribute"
+      ],
+      "id": [
+        "Attribute"
+      ]
+    },
+    {
+      "file": "item - item.csv",
+      "logicalFile": "item.csv",
+      "table": "item",
+      "required": [
+        "item_id",
+        "item_name",
+        "effect"
+      ],
+      "expectedHeaders": [
+        "item_id",
+        "item_name",
+        "skill_id",
+        "mid_figure",
+        "mid_fig_color",
+        "effect",
+        "target",
+        "cooldown",
+        "effect_value_min",
+        "effect_value_max",
+        "buy_level",
+        "buy_gold",
+        "sell_gold"
+      ],
+      "id": [
+        "item_id"
+      ]
+    },
+    {
+      "file": "map - map.csv",
+      "logicalFile": "map.csv",
+      "table": "map",
+      "required": [
+        "map_id",
+        "name",
+        "spawn_cd",
+        "unlock_level",
+        "max_monsters"
+      ],
+      "expectedHeaders": [
+        "map_id",
+        "name",
+        "spawn_cd",
+        "unlock_level",
+        "max_monsters"
+      ],
+      "id": [
+        "map_id"
+      ]
+    },
+    {
+      "file": "map_spawn - map_spawn.csv",
+      "logicalFile": "map_spawn.csv",
+      "table": "mapSpawn",
+      "required": [
+        "map_id",
+        "monster_id",
+        "name",
+        "spawn_rate"
+      ],
+      "expectedHeaders": [
+        "map_id",
+        "monster_id",
+        "name",
+        "spawn_rate"
+      ],
+      "id": [
+        "map_id",
+        "monster_id"
+      ]
+    },
+    {
+      "file": "monster_skill_setting - monster_skill_setting.csv",
+      "logicalFile": "monster_skill_setting.csv",
+      "table": "skill",
+      "required": [
+        "skill_id",
+        "name",
+        "damage_type",
+        "damage_target",
+        "multiplier",
+        "cast_time"
+      ],
+      "expectedHeaders": [
+        "skill_id",
+        "name",
+        "damage_type",
+        "damage_target",
+        "base_damage",
+        "multiplier",
+        "cast_time",
+        "effect1",
+        "effect1_target",
+        "effect1_value",
+        "effect1_sec",
+        "effect2",
+        "effect2_target",
+        "effect2_value",
+        "effect2_sec"
+      ],
+      "id": [
+        "skill_id"
+      ]
+    },
+    {
+      "file": "monster_use_skills - monster_use_skills.csv",
+      "logicalFile": "monster_use_skills.csv",
+      "table": "monsterSkills",
+      "required": [
+        "monster_id",
+        "name",
+        "skill_order",
+        "skill_id",
+        "skill_name",
+        "cooldown",
+        "initial_delay",
+        "use_priority",
+        "trigger_condition",
+        "skill_color"
+      ],
+      "expectedHeaders": [
+        "monster_id",
+        "name",
+        "skill_order",
+        "skill_id",
+        "skill_name",
+        "cooldown",
+        "initial_delay",
+        "use_priority",
+        "trigger_condition",
+        "skill_color"
+      ],
+      "id": [
+        "monster_id",
+        "skill_id"
+      ]
+    },
+    {
+      "file": "monsters - monsters.csv",
+      "logicalFile": "monsters.csv",
+      "table": "monsters",
+      "required": [
+        "monster_id",
+        "name",
+        "category",
+        "level",
+        "HP",
+        "HPR",
+        "AC",
+        "MR",
+        "ATK",
+        "MATK",
+        "AAR",
+        "SAR",
+        "ADAM",
+        "MDAM",
+        "attack_type",
+        "attack_speed",
+        "ASPD",
+        "gold_min",
+        "gold_max",
+        "loot_id",
+        "loot_multiplier"
+      ],
+      "expectedHeaders": [
+        "monster_id",
+        "name",
+        "category",
+        "level",
+        "HP",
+        "HPR",
+        "AC",
+        "MR",
+        "ATK",
+        "MATK",
+        "AAR",
+        "SAR",
+        "ADAM",
+        "MDAM",
+        "attack_type",
+        "attack_speed",
+        "ASPD",
+        "gold_min",
+        "gold_max",
+        "loot_id",
+        "loot_multiplier",
+        "loot2_id",
+        "loot2_multiplier"
+      ],
+      "id": [
+        "monster_id"
+      ]
+    },
+    {
+      "file": "player_level - player_level.csv",
+      "logicalFile": "player_level.csv",
+      "table": "playerLevel",
+      "required": [
+        "level",
+        "required_exp",
+        "total_exp"
+      ],
+      "expectedHeaders": [
+        "level",
+        "required_exp",
+        "total_exp"
+      ],
+      "id": [
+        "level"
+      ]
+    }
+  ]
+}

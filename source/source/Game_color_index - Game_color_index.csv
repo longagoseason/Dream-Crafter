@@ -1,0 +1,63 @@
+color_location,color_name,color_index
+right_player_name,#66B2FF,戰鬥資訊欄位，玩家角色名稱顏色
+right_monster_normal,#E0E0E0,戰鬥資訊欄位，一般怪物名稱顏色
+right_monster_boss,#FF8000,戰鬥資訊欄位，boss怪物名稱顏色
+right_critical_hit,#FF0000,戰鬥資訊欄位，暴擊時傷害數字與暴擊字樣顏色
+right_dodge,#00FFFF,戰鬥資訊欄位，閃避字樣顏色
+left_Mirror_color,#808080,左側裝備欄位，鏡像裝備顏色
+left_level_color,#FFFF00,左側角色血量與魔力欄位，顯示等級的數字顏色
+left_money_color,#FFFF00,左側金幣欄位，金幣數字的顏色
+left_equipment_tooltip_accent,#D4A94D,左側裝備欄位，裝備說明中的祝福與詛咒標題顏色
+mid_time_bar,#FFFF00,中間怪物欄，增援秒數顏色
+mid_skill_mp,#FFFF00,中間欄位，技能設定，技能MP消耗與冷卻顏色
+mid_skill_hp,#FF0000,中間欄位，技能設定，HP低於多少使用技能顏色
+mid_skill_monster_num,#FF0000,中間欄位，技能設定，敵方人數≥[ ]人使用顏色
+mid_skill_help,#FFFF00,中間欄位，技能設定，下方說明文字使用欄位
+mid_character_value,#FFFF00,中間欄位，角色資訊，所有Attribute在正值時的實際數字顏色
+mid_character_neg_value,#FF0000,中間欄位，角色資訊，所有Attribute在負值時的實際數字顏色
+mid_upgrade_total_num,#FF8000,"中間欄位，屬性配點，最左側的""屬性""欄位數字"
+mid_upgrade_add_num,#00FFFF,"中間欄位，屬性配點，""目前升級配點""欄位數字"
+mid_upgrade_equipment_num,#FFFF00,"中間欄位，屬性配點，""裝備屬性點數""欄位數字"
+mid_recover_HPMPauto,#FFFF00,中間欄位，恢復與設定，HP與MP自動使用%與其數值顏色
+mid_recover_help,#FFFF00,中間欄位，恢復與設定，下方說明欄位
+mid_recover_name,#FFFF00,中間欄位，恢復與設定，隊伍名稱&職業/角色名稱顏色
+mid_recover_reset,#FF0000,中間欄位，恢復與設定，重置職業的四個字的標題顏色
+left_hp_bar,#BD4B49,左側角色欄位，HP條填滿部分顏色
+left_mp_bar,#4D82AE,左側角色欄位，MP條填滿部分顏色
+left_exp_bar,#6D9F68,左側角色欄位，EXP條填滿部分顏色
+left_equipment_filled_background,#C7C7C7,左側裝備欄位，已有裝備格子的底色
+left_equipment_filled_text,#111111,左側裝備欄位，已有裝備格子的文字顏色
+left_equipment_empty_background,#303030,左側裝備欄位，空裝備格子的底色
+left_equipment_empty_text,#DDDDDD,左側裝備欄位，空裝備格子的文字顏色
+mid_monster_hp_bar,#BD4B49,中間怪物欄位，怪物HP條填滿部分顏色
+mid_inventory_filled_background,#C7C7C7,中間背包欄位，已有物品格子的底色
+mid_inventory_filled_text,#111111,中間背包欄位，已有物品格子的文字顏色
+mid_inventory_empty_background,#303030,中間背包欄位，空物品格子的底色
+mid_inventory_empty_text,#DDDDDD,中間背包欄位，空物品格子的文字顏色
+mid_upgrade_error,#E07B78,中間欄位，屬性配點錯誤訊息顏色
+mid_recover_warning,#E6B85C,中間欄位，恢復與設定警告訊息顏色
+mid_recover_reset_button,#FFFFFF,中間欄位，恢復與設定的角色重置按鈕文字顏色
+right_log_time,#8B8D88,戰鬥資訊欄位，戰鬥時間顏色
+right_shop_lock,#D4A94D,商店欄位，鎖定圖示與框線顏色
+left_enhance_positive_name,#FFFF00,強化+5以上裝備欄位，數值為增加
+left_enhance_negative_name,#FF0000,強化+5以上裝備欄位，數值為減少
+left_enhance_unchange_name,#FFFFFF,強化+5以上裝備欄位，數值為+0
+left_enhance_money,#FF8000,強化所需要的金幣顏色
+left_enhance_notice_color,#FF33FF,強化提醒字樣的顏色
+left_enhance_button_color,#FFFF33,強化系統按鈕顏色
+left_enhance_button_name,#FF8000,強化系統按鈕文字的顏色
+right_equipment_recover,#00FFFF,裝備回收顏色
+skill_intro_color,#00FFFF,skill_intro每項技能說明的顏色
+Death_Penalty_color,#FF0000,玩家角色死亡懲罰顏色
+Patchnote_main_color,#0000FF,patchnote最上方 [0.2] [0.3]欄位這邊顏色
+Patchnote_ver_color,#00FFFF,--- Ver 0.2.002 ---  版本號這串字的顏色
+Patchnote_type_color,#FF8000,Patchnote中type的標題顏色
+Patchnote_color,#FFFFFF,Patchnote內容的顏色
+buff_color,#00FFFF,Buff/Debuff 狀態欄位的 正面 狀態顏色
+debuff_color,#FF0000,Buff/Debuff 狀態欄位的 負面 狀態顏色
+buff_sec_color,#FFFF00,Buff/Debuff 狀態欄位的 秒數 狀態顏色
+right_heal_color,#00FF00,治療的數字顏色
+right_DOT_color,#FF007F,DOT的顏色
+Reward_not_get,#FF0000,Reward還沒領取的顏色
+right_counter_color,#FFE5CC,反擊的顏色
+right_reflict_color,#FFCCFF,反射的顏色
