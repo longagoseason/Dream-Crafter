@@ -1,7 +1,7 @@
 welcome_color,welcome_pt,is_Bold,welcome_name
 #FFFF00,20,TRUE,Dream-Crafter Ver. {GAME_VERSION}
-#FF66FF,16,TRUE,歡迎遊玩 Dream-Crafter
-#FFFFFF,12,FALSE,第一次遊玩建議，強烈建議先完整看完說明，左側隊伍欄位的[?]可以重新點開
+#FF66FF,16,TRUE,歡迎遊玩 Dream-Crafter　每日改版資訊請看Patch note［↗］［↗］［↑］［↑］
+#FFFFFF,12,FALSE,第一次遊玩建議，強烈建議先完整看完[↓]說明[↓]，左側隊伍欄位的[?]可以重新點開
 #FF66FF,20,TRUE,目前為 夏憶雪 單人開發的 自動戰鬥 RPG 遊戲
 #00FFFF,14,TRUE,玩家隊伍最右側的玩家，會優先受到近距離攻擊；怪物則是最左側
 #FFFFFF,14,TRUE,遊戲以 強化系統 為主軸、輔以 技能配點 與 打寶系統 搭配來進行

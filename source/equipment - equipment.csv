@@ -46,7 +46,7 @@ eq0111,Ａ 法杖,1000,magic_weapon,two_hand_weapon,mage|priest,wand.png,#A0A0A0
 eq0112,Ａ 拳套,1000,physical_weapon,Dual_wielding,martial,knuckles.png,#A0A0A0,10,12,,,,5,,,,,,,,,,3,3,,,,
 eq0113,Ａ 魔法球,1000,magic_weapon,two_hand_weapon,mage,magicball.png,#A0A0A0,10,,15,2,,,,,,,,,,,,,,5,1,,
 eq0114,Ａ 匕首,1000,physical_weapon,Dual_wielding,thief,knife.png,#A0A0A0,10,10,,2,30,,,,,,,,,,,,,,,3,3
-eq0115,Ａ 破魔劍,1000,hybrid_weapon,two_hand_weapon,spellblade,mageslayer.png,#99FF99,10,8,8,,,5,5,,,,,,,,,3,,3,,,
+eq0115,Ａ 破魔劍,1000,hybrid_weapon,two_hand_weapon,spellblade,mageslayer.png,#A0A0A0,10,8,8,,,5,5,,,,,,,,,3,,3,,,
 eq0131,Lv.2 力量戒指,1500,ring,,all,ring.png,#A0A0A0,20,,,,,,,2,2,,,,,,,4,,,,,
 eq0132,Lv.2 體質戒指,1500,ring,,all,ring.png,#A0A0A0,20,,,,,,,2,2,,,,,,,,4,,,,
 eq0133,Lv.2 智慧戒指,1500,ring,,all,ring.png,#A0A0A0,20,,,,,,,2,2,,,,,,,,,4,,,

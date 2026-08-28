@@ -48,6 +48,7 @@ const roundStat = (n) => Math.round(n * 10) / 10;
 const roundSigned = (n) => Math.round(n * 1000000) / 1000000;
 const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const runtimeWarningKeys = new Set();
+let dotInstanceSequence = 0;
 
 function aarSarMaximum() {
   const configured = Number(systemSettings()?.AAR_SAR_max);
@@ -4123,18 +4124,18 @@ function addTimedDotEffect(target, caster, skill, effect, damagePerSecond, skill
   if (!(seconds > 0) || !(dps > 0) || !Number.isFinite(seconds) || !Number.isFinite(dps)) return false;
   target.buffs ??= [];
   const casterEntityKey = statusCasterEntityKey(caster);
-  const effectKey = `${casterEntityKey}:${skill.skill_id}:${effect.index}`;
-  const existing = target.buffs.find((buff) => buff.effectKey === effectKey);
+  const dotInstanceId = ++dotInstanceSequence;
+  const effectKey = `${casterEntityKey}:${skill.skill_id}:${effect.index}:dot:${dotInstanceId}`;
   const next = {
-    effectKey, casterEntityKey, casterName: caster.name, sourceName: caster.name,
+    effectKey, dotInstanceId, casterEntityKey, casterName: caster.name, sourceName: caster.name,
+    sourceEntity: caster, targetEntity: target,
     skillId: skill.skill_id, skillName: skill.name, name: skill.name,
     skillColor: csvColor(skillColor || skill.skill_color, "#ededed"),
     effectIndex: effect.index, stat: "DOT", statusKind: "DOT",
     value: -dps, effectAmount: -dps, snapshotDotDamagePerSecond: dps,
     dotRemainingDamage: dps * seconds, duration: seconds, remaining: seconds,
   };
-  if (existing) Object.assign(existing, next);
-  else target.buffs.push(next);
+  target.buffs.push(next);
   return true;
 }
 

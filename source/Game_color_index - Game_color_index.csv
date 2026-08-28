@@ -49,7 +49,7 @@ left_enhance_button_name,#FF8000,強化系統按鈕文字的顏色
 right_equipment_recover,#00FFFF,裝備回收顏色
 skill_intro_color,#00FFFF,skill_intro每項技能說明的顏色
 Death_Penalty_color,#FF0000,玩家角色死亡懲罰顏色
-Patchnote_main_color,#0000FF,patchnote最上方 [0.2] [0.3]欄位這邊顏色
+Patchnote_main_color,#FFFF00,patchnote最上方 [0.2] [0.3]欄位這邊顏色
 Patchnote_ver_color,#00FFFF,--- Ver 0.2.002 ---  版本號這串字的顏色
 Patchnote_type_color,#FF8000,Patchnote中type的標題顏色
 Patchnote_color,#FFFFFF,Patchnote內容的顏色
