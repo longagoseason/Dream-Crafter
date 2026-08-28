@@ -1,13 +1,14 @@
 welcome_color,welcome_pt,is_Bold,welcome_name
-#FF66FF,18,TRUE,～ ～ ～ ～ 歡迎來到 Dream-Crafter Ver {GAME_VERSION} ～ ～ ～ ～
-#00FF00,14,TRUE,第一次遊玩建議，強烈建議先完整看完說明，左側隊伍欄位的[?]可以重新點開
-#FF66FF,20,TRUE,～ ～ 歡迎來到 夏憶雪 單人開發的 自動戰鬥 RPG 遊戲 ～ ～
-#00FFFF,12,FALSE,玩家隊伍最右側的玩家，會優先受到近距離攻擊；怪物則是最左側
-#FFFFFF,16,TRUE,遊戲以 強化系統 為主軸、輔以 技能配點 與 打寶系統 搭配來進行
-#00FF00,12,FALSE,遊戲上前期建議 5-10分鐘 看一次遊戲，強化你的裝備
+#FFFF00,20,TRUE,Dream-Crafter Ver. {GAME_VERSION}
+#FF66FF,16,TRUE,歡迎遊玩 Dream-Crafter
+#FFFFFF,12,FALSE,第一次遊玩建議，強烈建議先完整看完說明，左側隊伍欄位的[?]可以重新點開
+#FF66FF,20,TRUE,目前為 夏憶雪 單人開發的 自動戰鬥 RPG 遊戲
+#00FFFF,14,TRUE,玩家隊伍最右側的玩家，會優先受到近距離攻擊；怪物則是最左側
+#FFFFFF,14,TRUE,遊戲以 強化系統 為主軸、輔以 技能配點 與 打寶系統 搭配來進行
+#00FF00,14,FALSE,遊戲上前期建議 5-10分鐘 看一次遊戲，強化你的裝備
 #00FFFF,12,FALSE,角色血條下方可以轉換職業；所有角色裝備與技能系統獨立
-#FFFFFF,12,FALSE,目前有５個職業，戰士、武道家、法師、牧師、盜賊
-#FFFFFF,12,FALSE,有新職業的考慮，技能與平衡需要比較長時間
+#FFFFFF,12,FALSE,目前職業：戰士、武道家、法師、牧師、盜賊、魔劍士
+#FFFFFF,12,FALSE,職業的技能與平衡都還在過渡期
 #00FF00,16,TRUE,[角色資訊]、滑鼠放上屬性會解說每項能力
 #FFFFFF,12,FALSE,開始遊戲時，因為是放置遊戲，每次升級的擁有的屬性都會影響未來角色的發展
 #FFFFFF,12,FALSE,多善用 [暫停] 按鈕，ZaWarudo這個世界看看

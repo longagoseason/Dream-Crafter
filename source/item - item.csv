@@ -27,7 +27,7 @@ book103,氣刃斬,csk103,skillbook.png,#FFCC99,learn_skill,warrior,,,,8,8000,800
 book104,月孤斬,csk104,skillbook.png,#FFCC99,learn_skill,warrior,,,,11,10000,1000
 book105,戰士的自我修養 Lv.11,csk105,skillbook.png,#FFCC99,learn_skill,warrior,,,,11,20000,2000
 book106,十字斬,csk106,skillbook.png,#FFCC99,learn_skill,warrior,,,,15,13000,1300
-book107,劍氣護體,csk107,skillbook.png,#FFCC99,learn_skill,warrior,,,,17,15000,1500
+book107,以牙還牙,csk107,skillbook.png,#FFCC99,learn_skill,warrior,,,,17,15000,1500
 book108,流星劍,csk108,skillbook.png,#FFCC99,learn_skill,warrior,,,,20,18000,1800
 book109,不屈意志,csk109,skillbook.png,#FFCC99,learn_skill,warrior,,,,25,23000,2300
 book110,蒼龍破,csk110,skillbook.png,#FFCC99,learn_skill,warrior,,,,29,27000,2700
@@ -51,7 +51,7 @@ book305,武道的自我修養 Lv.11,csk305,skillbook.png,#FFE082,learn_skill,mar
 book306,百裂拳,csk306,skillbook.png,#FFE082,learn_skill,martial,,,,15,13000,1300
 book307,鬥氣爆發,csk307,skillbook.png,#FFE082,learn_skill,martial,,,,17,15000,1500
 book308,逆透勁,csk308,skillbook.png,#FFE082,learn_skill,martial,,,,20,18000,1800
-book309,輕盈步伐,csk309,skillbook.png,#FFE082,learn_skill,martial,,,,25,23000,2300
+book309,移花接木,csk309,skillbook.png,#FFE082,learn_skill,martial,,,,25,23000,2300
 book310,龍捲旋風腿,csk310,skillbook.png,#FFE082,learn_skill,martial,,,,29,27000,2700
 book311,武道的自我修養 Lv.31,csk311,skillbook.png,#FFE082,learn_skill,martial,,,,31,60000,6000
 book401,初級治癒術,csk401,skillbook.png,#E1F5FE,learn_skill,priest,,,,3,3000,300
