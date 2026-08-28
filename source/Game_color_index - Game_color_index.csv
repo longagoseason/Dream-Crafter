@@ -59,3 +59,5 @@ buff_sec_color,#FFFF00,Buff/Debuff 狀態欄位的 秒數 狀態顏色
 right_heal_color,#00FF00,治療的數字顏色
 right_DOT_color,#FF007F,DOT的顏色
 Reward_not_get,#FF0000,Reward還沒領取的顏色
+right_counter_color,#FFE5CC,反擊的顏色
+right_reflict_color,#FFCCFF,反射的顏色

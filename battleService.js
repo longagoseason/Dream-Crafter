@@ -59,6 +59,23 @@
     return round(Math.max(1, afterProc - defense / safeArmorRate));
   }
 
+  function mitigateReactionDamage(raw, target, damageType, attackerLevel, random = Math.random, armorRate = 2) {
+    const rawDamage = Math.max(0, Number(raw) || 0);
+    if (!(rawDamage > 0)) return { damage: 0, rawDamage, halfChance: 0 };
+    if (damageType === "hybrid") {
+      const ac = combatStat(target, "AC");
+      const mr = combatStat(target, "MR");
+      const level = Math.max(1, Number(attackerLevel) || 1);
+      const halfChance = clamp(((ac + mr) / 2) / (level * 5) * .5, 0, .5);
+      const afterProc = random() < halfChance ? rawDamage * .5 : rawDamage;
+      const divisor = Number(armorRate);
+      const safeArmorRate = Number.isFinite(divisor) && divisor > 0 ? divisor : 2;
+      return { damage: round(Math.max(1, afterProc - (ac + mr) / safeArmorRate)), rawDamage, halfChance };
+    }
+    const defenseKey = damageType === "magic" ? "MR" : "AC";
+    return { damage: mitigate(rawDamage, target, defenseKey, attackerLevel, random, armorRate), rawDamage };
+  }
+
   function calculateAttackDamage(attacker, target, damageType, baseDamage = 0, skillMultiplier = 1, random = Math.random, armorRate = 2) {
     if (damageType === "hybrid") {
       const atk = Math.max(0, combatStat(attacker, "ATK"));
@@ -103,5 +120,5 @@
     return { amount: round(amount), roll, critical };
   }
 
-  return { combatStat, luckyRollCount, rollLuckyRange, rollCritical, rollAttackAvoidance, mitigate, calculateAttackDamage, calculateHeal };
+  return { combatStat, luckyRollCount, rollLuckyRange, rollCritical, rollAttackAvoidance, mitigate, mitigateReactionDamage, calculateAttackDamage, calculateHeal };
 });

@@ -116,10 +116,18 @@
         }
       }
       for (const effectNumber of [1, 2]) {
-        if (record[`effect${effectNumber}`] !== "DMG") continue;
+        const effect = record[`effect${effectNumber}`];
+        const percentageOnly = ["DMG", "Counter", "PReflect", "MReflect", "HReflect", "Reflect"].includes(effect);
+        if (!percentageOnly) continue;
         const value = record[`effect${effectNumber}_value`];
         if (value !== null && value !== undefined && !/^\+?(?:\d+(?:\.\d*)?|\.\d+)%$/.test(String(value).trim())) {
-          throw new CsvLoadError(`CSV validation failed: ${entry.file} row ${rowIndex + 1}, effect${effectNumber}_value for DMG must be blank or a non-negative percentage`, { path: entry.file, row: rowIndex + 1, column: `effect${effectNumber}_value` });
+          throw new CsvLoadError(`CSV validation failed: ${entry.file} row ${rowIndex + 1}, effect${effectNumber}_value for ${effect} must be blank or a non-negative percentage`, { path: entry.file, row: rowIndex + 1, column: `effect${effectNumber}_value` });
+        }
+        if (effect !== "DMG") {
+          const seconds = Number(record[`effect${effectNumber}_sec`]);
+          if (!(seconds > 0) || !Number.isFinite(seconds)) {
+            throw new CsvLoadError(`CSV validation failed: ${entry.file} row ${rowIndex + 1}, effect${effectNumber}_sec for ${effect} must be greater than 0`, { path: entry.file, row: rowIndex + 1, column: `effect${effectNumber}_sec` });
+          }
         }
       }
       for (const [fieldName, value] of Object.entries(record)) {

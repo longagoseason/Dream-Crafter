@@ -58,3 +58,6 @@ sk054,血肉再生,buff,none,0,0,0,HPR,ally_aoe,666,3,HP,self,500,0
 sk055,你這次護駕有功,buff,none,0,0,0,AC,random,33,5,MR,random,33,5
 sk056,索命黑令旗,buff,none,0,0,0,ATK,ALLaoe,33,5,ADAM,ALLaoe,33,5
 sk057,斬擊(佯攻),physical,front,150,200,1,DMG,ally_aoe,,,,,,
+sk058,明鏡止水,physical,aoe,100,100,1,PReflect,DMGchoose,50%,15,,,,
+sk059,浮文逆流,magic,aoe,100,100,1,MReflect,DMGchoose,50%,15,,,,
+sk060,雙極天幕,hybrid,aoe,100,100,1,HReflect,DMGchoose,70%,15,,,,

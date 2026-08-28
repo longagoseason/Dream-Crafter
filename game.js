@@ -4049,6 +4049,21 @@ function configuredDmgEffectMultiplier(caster, skill, effect, allowAttributeScal
   return roundSigned((basePercent + attributeBonusPercent) / 100);
 }
 
+const REACTION_EFFECT_TYPES = new Set(["Counter", "PReflect", "MReflect", "HReflect", "Reflect"]);
+
+function configuredReactionEffectPercent(skill, effect) {
+  const raw = String(effect.value ?? "").trim();
+  if (!raw) return 100;
+  const match = raw.match(/^\+?(\d+(?:\.\d*)?|\.\d+)%$/);
+  if (match && Number.isFinite(Number(match[1]))) return Number(match[1]);
+  const warningKey = `invalid-reaction-effect:${skill?.skill_id ?? skill?.name ?? "unknown"}:${effect.index}:${raw}`;
+  if (!runtimeWarningKeys.has(warningKey)) {
+    runtimeWarningKeys.add(warningKey);
+    console.warn(`[WARN] skill ${skill?.skill_id ?? skill?.name ?? "unknown"} effect${effect.index} ${effect.stat} value must be blank or a non-negative percentage: ${raw}.`);
+  }
+  return null;
+}
+
 function parseDotEffectValue(rawValue, skill = {}, effect = {}) {
   const raw = String(rawValue ?? "").trim();
   const percentage = raw.endsWith("%");
@@ -4118,6 +4133,30 @@ function addTimedDotEffect(target, caster, skill, effect, damagePerSecond, skill
     value: -dps, effectAmount: -dps, snapshotDotDamagePerSecond: dps,
     dotRemainingDamage: dps * seconds, duration: seconds, remaining: seconds,
   };
+  if (existing) Object.assign(existing, next);
+  else target.buffs.push(next);
+  return true;
+}
+
+function addTimedReactionEffect(target, caster, skill, effect, reactionPercent, skillColor = null) {
+  const seconds = Number(effect.seconds);
+  const percent = Number(reactionPercent);
+  if (!(seconds > 0) || !Number.isFinite(seconds) || !(percent >= 0) || !Number.isFinite(percent)) return false;
+  target.buffs ??= [];
+  const casterEntityKey = statusCasterEntityKey(caster);
+  const effectKey = `${casterEntityKey}:${skill.skill_id}:${effect.index}`;
+  const existing = target.buffs.find((buff) => buff.effectKey === effectKey);
+  const counter = effect.stat === "Counter";
+  const next = {
+    effectKey, casterEntityKey, casterName: caster.name, sourceName: caster.name, sourceEntity: caster,
+    skillId: skill.skill_id, skillName: skill.name, name: skill.name,
+    skillColor: csvColor(skillColor || skill.skill_color, "#ededed"),
+    effectIndex: effect.index, stat: effect.stat, statusKind: counter ? "Counter" : "Reflect",
+    reactionType: effect.stat, reactionPercent: percent,
+    value: counter ? -percent : percent, effectAmount: counter ? -percent : percent,
+    duration: seconds, remaining: seconds,
+  };
+  if (counter) next.remainingCounter = 3;
   if (existing) Object.assign(existing, next);
   else target.buffs.push(next);
   return true;
@@ -4247,6 +4286,76 @@ function logAppliedSkillEffect(casterName, skill, effect, value, targets, skillC
     { channel, skillName: skill.name, skillColor });
 }
 
+function reactionSourceEntity(status) {
+  if (status?.sourceEntity) return status.sourceEntity;
+  return [...(state.roster ?? []), ...(state.enemies ?? [])]
+    .find((entity) => statusCasterEntityKey(entity) === status?.casterEntityKey) ?? null;
+}
+
+function reactionMatchesDamageType(status, damageType) {
+  return status?.reactionType === "Reflect"
+    || status?.reactionType === "PReflect" && damageType === "physical"
+    || status?.reactionType === "MReflect" && damageType === "magic"
+    || status?.reactionType === "HReflect" && damageType === "hybrid";
+}
+
+function removeRuntimeStatus(unit, status) {
+  const index = unit?.buffs?.indexOf(status) ?? -1;
+  if (index >= 0) unit.buffs.splice(index, 1);
+}
+
+function reactionLogChannel(source) {
+  return String(statusCasterEntityKey(source)).startsWith("hero:") ? "player" : "monster";
+}
+
+function executeReactionDamage(source, target, status, baseDamage, damageType, reactionKind) {
+  if (!source || !target || !(target.hp > 0) || !(Number(baseDamage) > 0) || !["physical", "magic", "hybrid"].includes(damageType)) return { hit: false };
+  const channel = reactionLogChannel(source);
+  const skillName = status.skillName || status.name || (reactionKind === "Counter" ? "Counter" : "Reflect");
+  const avoidance = rollConfiguredAttackAvoidance(source, target, damageType);
+  if (avoidance.dodged) {
+    addLog(`${source.name} 的 ${skillName} 被 ${target.name} 閃避。`, { channel, skillName, skillColor: status.skillColor });
+    return { hit: false, dodged: true, target };
+  }
+  const result = BattleService.mitigateReactionDamage(baseDamage, target, damageType, source.level, Math.random, configuredArmorRate());
+  const hpBefore = Math.max(0, Number(target.hp) || 0);
+  target.hp = round(target.hp - result.damage);
+  const damageDealt = roundSigned(Math.min(hpBefore, Math.max(0, Number(result.damage) || 0)));
+  const reactionText = reactionKind === "Counter" ? "反擊" : "反射";
+  addLog(`${source.name} 的 ${skillName} ${reactionText} ${target.name} 造成 ${result.damage} 點傷害。`, {
+    channel, skillName, skillColor: status.skillColor, damage: result.damage,
+    counterText: reactionKind === "Counter" ? reactionText : null,
+    reflectText: reactionKind === "Reflect" ? reactionText : null,
+  });
+  if (target.hp <= 0) resolveSkillCausedDeath(target, source, { skill_id: status.skillId, name: skillName }, { damage: result.damage, critical: { isCritical: false } }, channel);
+  return { hit: true, target, damage: result.damage, damageDealt };
+}
+
+function processDamageReactions(attacker, defender, damageType, damageDealt, context = {}) {
+  const actualDamage = Math.max(0, Number(damageDealt) || 0);
+  if (context.reactionDamage || !(actualDamage > 0) || !attacker || !defender) return [];
+  const results = [];
+  const reflects = [...(defender.buffs ?? [])].filter((status) => status.statusKind === "Reflect" && Number(status.remaining) > 0 && reactionMatchesDamageType(status, damageType));
+  for (const status of reflects) {
+    if (!(attacker.hp > 0)) break;
+    const source = reactionSourceEntity(status) ?? defender;
+    const baseDamage = actualDamage * Math.max(0, Number(status.reactionPercent) || 0) / 100;
+    results.push(executeReactionDamage(source, attacker, status, baseDamage, damageType, "Reflect"));
+  }
+  if (!(defender.hp > 0) || !(attacker.hp > 0)) return results;
+  const defenderKey = statusCasterEntityKey(defender);
+  const counters = [...(attacker.buffs ?? [])].filter((status) => status.statusKind === "Counter" && Number(status.remaining) > 0
+    && status.casterEntityKey === defenderKey && reactionSourceEntity(status) === defender);
+  for (const status of counters) {
+    if (!(attacker.hp > 0) || !(defender.hp > 0)) break;
+    status.remainingCounter = Math.max(0, Number(status.remainingCounter) || 0) - 1;
+    if (status.remainingCounter <= 0) removeRuntimeStatus(attacker, status);
+    const baseDamage = actualDamage * Math.max(0, Number(status.reactionPercent) || 0) / 100;
+    results.push(executeReactionDamage(defender, attacker, status, baseDamage, damageType, "Counter"));
+  }
+  return results;
+}
+
 function executeSkillDamageComponent(caster, target, skill, context = {}) {
   if (!target || target.hp <= 0 || !["physical", "magic", "hybrid"].includes(skill.damage_type)) return { hit: false };
   const avoidance = rollConfiguredAttackAvoidance(caster, target, skill.damage_type);
@@ -4262,6 +4371,7 @@ function executeSkillDamageComponent(caster, target, skill, context = {}) {
   const damageDealt = roundSigned(Math.min(hpBefore, Math.max(0, Number(result.damage) || 0)));
   addLog(`${caster.name} 使用 ${skill.name}，對 ${target.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
     { channel: context.channel, skillName: skill.name, skillColor: context.skillColor, critical: result.critical.isCritical, damage: result.damage });
+  processDamageReactions(caster, target, skill.damage_type, damageDealt, context);
   if (target.hp <= 0) resolveSkillCausedDeath(target, caster, skill, result, context.channel);
   return { hit: true, target, ...result, damageDealt };
 }
@@ -4294,6 +4404,19 @@ function applyDirectResourceEffect(caster, skill, effect, target, value, context
 
 function applyConfiguredSkillEffects(caster, skill, context) {
   for (const effect of configuredSkillEffects(skill)) {
+    if (REACTION_EFFECT_TYPES.has(effect.stat)) {
+      const reactionPercent = configuredReactionEffectPercent(skill, effect);
+      const seconds = Number(effect.seconds);
+      if (reactionPercent === null || !(seconds > 0) || !Number.isFinite(seconds)) continue;
+      const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
+      for (const target of targets.filter((candidate) => candidate.hp > 0)) {
+        if (effect.stat === "Counter" && effect.target === "DMGchoose" && context.mainDamageByTarget?.has?.(target) && !(mainDamageForTarget(context, target) > 0)) continue;
+        if (addTimedReactionEffect(target, caster, skill, effect, reactionPercent, context.skillColor)) {
+          logAppliedSkillEffect(caster.name, skill, effect, effect.stat === "Counter" ? -reactionPercent : reactionPercent, [target], context.skillColor, context.channel);
+        }
+      }
+      continue;
+    }
     if (effect.stat === "DMG") {
       const damageComponentMultiplier = configuredDmgEffectMultiplier(caster, skill, effect, context.channel === "player");
       if (damageComponentMultiplier === null) continue;
@@ -4553,8 +4676,10 @@ function playerAttack(actor, enemy) {
   const avoidance = rollConfiguredAttackAvoidance(actor, enemy, damageType);
   if (avoidance.dodged) { addLog(`${actor.name} 的攻擊被 ${enemy.name} 閃避。`, { channel: "player" }); return; }
   const result = calculateAttackDamage(actor, enemy, damageType, 0, 1, Math.random, configuredArmorRate());
+  const hpBefore = Math.max(0, Number(enemy.hp) || 0);
   enemy.hp = round(enemy.hp - result.damage); addLog(`${actor.name} 對 ${enemy.name} 造成 ${result.damage} 點傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
     { channel: "player", critical: result.critical.isCritical, damage: result.damage });
+  processDamageReactions(actor, enemy, damageType, roundSigned(Math.min(hpBefore, result.damage)));
   if (enemy.hp <= 0) defeatMonster(enemy);
 }
 
@@ -4566,8 +4691,10 @@ function monsterAttack(enemy, target) {
     ? state.data.skill.find((skill) => skill.damage_type === "hybrid" && skill.name === "普通攻擊")
     : state.data.skill.find((skill) => skill.skill_id === (damageType === "magic" ? "sk002" : "sk001"));
   const result = calculateAttackDamage(enemy, target, damageType, basicSkill?.base_damage ?? 0, basicSkill?.multiplier ? basicSkill.multiplier / 100 : 1, Math.random, configuredArmorRate());
+  const hpBefore = Math.max(0, Number(target.hp) || 0);
   target.hp = round(target.hp - result.damage); addLog(`${enemy.name} 攻擊前排 ${target.name}，造成 ${result.damage} 傷害${result.critical.isCritical ? "（暴擊）" : ""}。`,
     { channel: "monster", critical: result.critical.isCritical, damage: result.damage });
+  processDamageReactions(enemy, target, damageType, roundSigned(Math.min(hpBefore, result.damage)));
   if (target.hp <= 0) handleHeroDeath(target, { kind: "direct", sourceName: enemy.name, skillName: "攻擊", damage: result.damage, critical: result.critical.isCritical });
 }
 
@@ -4919,6 +5046,8 @@ function coloredLogHtml(text, meta = {}) {
   if (meta.critical && meta.damage !== null && meta.damage !== undefined) addToken(formatExactNumber(meta.damage), gameColor("critical_hit"), "log-critical-damage", 7);
   addToken(meta.recoveryText, indexedColor("right_heal_color", "#00FF00"), "log-recovery", 10);
   addToken(meta.dotText, indexedColor("right_DOT_color", "#FF007F"), "log-dot", 10);
+  addToken(meta.counterText, indexedColor("right_counter_color", "#FFE5CC"), "log-counter", 10);
+  addToken(meta.reflectText, indexedColor("right_reflict_color", "#FFCCFF"), "log-reflect", 10);
   addToken(meta.deathPenaltyText, indexedColor("Death_Penalty_color"), "log-death-penalty", 10);
 
   const candidates = [];
@@ -4987,7 +5116,11 @@ function statusEffectText(status) {
   const amount = Number(status.effectAmount ?? status.value) || 0;
   const effectText = status.statusKind === "DOT"
     ? `每秒 HP -${formatExactNumber(status.snapshotDotDamagePerSecond)}`
-    : `${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)}`;
+    : status.statusKind === "Counter"
+      ? `Counter ${formatExactNumber(status.reactionPercent)}%（剩餘${Math.max(0, Number(status.remainingCounter) || 0)}次）`
+      : status.statusKind === "Reflect"
+        ? `${status.reactionType} ${formatExactNumber(status.reactionPercent)}%`
+        : `${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)}`;
   return `${status.casterName ?? status.sourceName ?? "未知來源"} | ${status.skillName ?? status.name ?? status.skillId ?? "未知技能"} | ${effectText} (${Math.max(0, Math.ceil(Number(status.remaining) || 0))}s)`;
 }
 
@@ -5002,10 +5135,11 @@ function statusSkillColor(status) {
 }
 
 function statusGroups(unit) {
-  const active = (unit?.buffs ?? []).filter((status) => Number(status.remaining) > 0 && Number(status.effectAmount ?? status.value) !== 0);
+  const active = (unit?.buffs ?? []).filter((status) => Number(status.remaining) > 0
+    && (status.statusKind === "Counter" || status.statusKind === "Reflect" || Number(status.effectAmount ?? status.value) !== 0));
   return {
-    buff: active.filter((status) => Number(status.effectAmount ?? status.value) > 0),
-    debuff: active.filter((status) => Number(status.effectAmount ?? status.value) < 0),
+    buff: active.filter((status) => status.statusKind === "Reflect" || status.statusKind !== "Counter" && Number(status.effectAmount ?? status.value) > 0),
+    debuff: active.filter((status) => status.statusKind === "Counter" || status.statusKind !== "Reflect" && Number(status.effectAmount ?? status.value) < 0),
   };
 }
 
@@ -5048,8 +5182,13 @@ function renderStatusDetailRow(status) {
   const skill = document.createElement("span"); skill.textContent = status.skillName ?? status.name ?? status.skillId ?? "未知技能"; skill.style.color = statusSkillColor(status);
   const effect = document.createElement("span"); effect.textContent = status.statusKind === "DOT"
     ? `每秒 HP -${formatExactNumber(status.snapshotDotDamagePerSecond)}`
-    : `${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)}`;
-  effect.style.color = indexedColor(amount >= 0 ? "buff_color" : "debuff_color", amount >= 0 ? "#00FFFF" : "#FF0000");
+    : status.statusKind === "Counter"
+      ? `Counter ${formatExactNumber(status.reactionPercent)}%（剩餘${Math.max(0, Number(status.remainingCounter) || 0)}次）`
+      : status.statusKind === "Reflect"
+        ? `${status.reactionType} ${formatExactNumber(status.reactionPercent)}%`
+        : `${status.stat} ${amount >= 0 ? "+" : ""}${formatEnhancementValue(status.stat, amount)}`;
+  const beneficial = status.statusKind === "Reflect" || status.statusKind !== "Counter" && amount >= 0;
+  effect.style.color = indexedColor(beneficial ? "buff_color" : "debuff_color", beneficial ? "#00FFFF" : "#FF0000");
   const seconds = document.createElement("span"); seconds.textContent = `(${Math.max(0, Math.ceil(Number(status.remaining) || 0))}s)`;
   seconds.style.color = indexedColor("buff_sec_color", "#FFFF00");
   row.append(caster, skill, effect, seconds);
