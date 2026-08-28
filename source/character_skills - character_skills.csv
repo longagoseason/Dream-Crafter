@@ -15,13 +15,13 @@ mage,魔法彈,csk200,1,0,0,#FFFFFF,magic,front,0,100,0,FALSE,,,,,,,,,,,,,TRUE,1
 mage,風刃,csk201,1,5,0,#00FFFF,magic,front,1,130,0,TRUE,,,,,,,,,,,,,TRUE,99,,,,
 mage,魔法之道,csk202,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,5,60,INT,0.1,,,,,,,TRUE,39,,,,[成長] | [buff]
 mage,火球術,csk203,5,25,0,#00FFFF,magic,aoe,5,80,0,TRUE,,,,,,,,,,,,,TRUE,69,,,,超過30歲轉職後習得
-mage,寒冰之槍,csk204,8,10,0,#00FFFF,magic,front,16,160,0,TRUE,,,,,,,,,,,,,TRUE,98,,,,
+mage,寒冰之槍,csk204,8,15,0,#00FFFF,magic,front,16,160,0,TRUE,,,,,,,,,,,,,TRUE,98,,,,
 mage,法師的自我修養 Lv.11,csk205,11,50,300,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,5,60,INT,0.1,MATK,self,1,60,INT,0.1,TRUE,10,,,,[成長] | [buff]
-mage,冰牢,csk206,13,15,5,#00FFFF,magic,front,13,190,0,TRUE,ASPD,front,-40,20,,,,,,,,,TRUE,97,,,,[debuff] | 冰緩前方敵人
+mage,冰牢,csk206,13,25,5,#00FFFF,magic,front,13,190,0,TRUE,ASPD,front,-40,20,,,,,,,,,TRUE,97,,,,[debuff] | 冰緩前方敵人
 mage,魔法護盾,csk207,15,50,60,#FFFF00,buff,none,0,0,0,TRUE,MR,self,5,20,WIS,0.1,AC,self,5,20,CON,0.1,TRUE,38,,,,[成長]
-mage,落雷,csk208,18,35,0,#00FFFF,magic,random,36,150,0,TRUE,DMG,random,80%,,,,DMG,random,60%,,,,TRUE,96,,,,
-mage,奧術空想,csk209,23,40,5,#00FFFF,magic,aoe,23,90,0,TRUE,ASPD,enemy_aoe,-40,20,,,,,,,,,TRUE,68,,,,[debuff] | 冰緩所有敵人
-mage,連鎖閃電,csk210,27,45,0,#00FFFF,magic,aoe,27,100,0,TRUE,,,,,,,,,,,,,TRUE,67,,,,
+mage,落雷,csk208,18,40,0,#00FFFF,magic,random,36,150,0,TRUE,DMG,random,80%,,,,DMG,random,60%,,,,TRUE,96,,,,
+mage,奧術空想,csk209,23,55,5,#00FFFF,magic,aoe,23,90,0,TRUE,ASPD,enemy_aoe,-40,20,,,,,,,,,TRUE,68,,,,[debuff] | 冰緩所有敵人
+mage,連鎖閃電,csk210,27,70,0,#00FFFF,magic,aoe,27,100,0,TRUE,,,,,,,,,,,,,TRUE,67,,,,
 mage,法師的自我修養 Lv.31,csk211,31,100,300,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,10,60,INT,0.2,MATK,self,5,60,INT,0.2,TRUE,9,,,,[成長] | [buff]
 martial,攻擊,csk300,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,,,TRUE,100,,,,
 martial,螺旋拳,csk301,1,5,0,#CC6600,physical,front,1,120,0,TRUE,,,,,,,,,,,,,TRUE,99,,,,
