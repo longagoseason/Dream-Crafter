@@ -19,7 +19,7 @@ sk015,刺擊,physical,front,50,175,0,,,,,,,,
 sk016,放血,physical,front,50,150,0,DOT,front,50%,5,,,,
 sk017,重盾衝鋒,physical,front,50,200,0,,,,,,,,
 sk018,連續突刺,physical,front,50,220,0,AC,front,-50,10,,,,
-sk019,草包治療,buff,none,0,0,0,HP,ally_aoe,666,0,,,,
+sk019,孤注一擲：綠色奇蹟,buff,none,0,0,0,HP,ally_aoe,6666,0,HPR,ally_aoe,1111,6
 sk020,地裂,magic,aoe,50,200,0,,,,,,,,
 sk021,黑暗侵蝕,magic,aoe,77,200,0,MR,enemy_aoe,-30,10,AC,enemy_aoe,-30,10
 sk022,黑闇降臨,magic,aoe,77,200,0,SAR,enemy_aoe,-30,10,AAR,enemy_aoe,-30,10
