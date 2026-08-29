@@ -1,7 +1,0 @@
-Attribute,ATK,MATK,CRI,CRI_DMG,AC,MR,AAR,SAR,HP,HPR,MP,MPR,ADAM,MDAM,Enhance_Attribute,Enhance_min,Enhance_max,over_att_num,Recursive,over_effect,overvalue
-STR,1,,,,,,,,,,,,0.2,,,,,100,TRUE,ADAM,ATK*0.1
-CON,,,,,,,,,5,0.1,,,,,HP,0.1,1,100,TRUE,HPR,HP*0.01
-WIS,,,,,,,,,,,5,0.1,,,MP,0.1,1,100,TRUE,MPR,MP*0.002
-INT,,1,,,,,,,,,,,,0.2,,,,100,TRUE,MDAM,MATK*0.1
-DEX,,,0.05,,,,0.05,0.05,,,,,,,,,,100,TRUE,CRI,DEX*0.025
-LUK,,,0.05,1,,,,,,,,,,,,,,100,TRUE,CRI_DMG,LUK*0.25
