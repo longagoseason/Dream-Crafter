@@ -3844,8 +3844,7 @@ function update(dt) {
   for (const actor of livingParty()) {
     applyRegeneration(actor, dt);
     if (actor.hp <= 0) continue;
-    maybeAutoUseRecovery(actor);
-    updateHeroAction(actor, dt);
+    updateHeroCombatRuntime(actor, dt);
   }
   for (const enemy of [...state.enemies]) {
     if (enemy.hp <= 0) continue;
@@ -4515,6 +4514,13 @@ function maybeAutoUseRecovery(hero) {
   const settings = hero.recoverySettings ?? { hpEnabled: true, hpPercent: 20, hpItemId: null, mpEnabled: true, mpPercent: 20, mpItemId: null };
   if (settings.hpEnabled && hero.hp < hero.maxHp && hero.hp / hero.maxHp * 100 <= settings.hpPercent) tryAutoRecoveryEffect(hero, "HPrecover", settings.hpItemId);
   if (settings.mpEnabled && hero.mp < hero.maxMp && hero.maxMp > 0 && hero.mp / hero.maxMp * 100 <= settings.mpPercent) tryAutoRecoveryEffect(hero, "MPrecover", settings.mpItemId);
+}
+
+function updateHeroCombatRuntime(hero, dt) {
+  // Auto recovery is an independent item event. Its result must never gate,
+  // consume, delay, or otherwise replace this tick's character ACTION update.
+  maybeAutoUseRecovery(hero);
+  updateHeroAction(hero, dt);
 }
 
 function tryAutoRecoveryEffect(hero, effect, selectedItemId = null) {
