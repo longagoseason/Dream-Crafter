@@ -1,6 +1,7 @@
 monster_id,name,skill_order,skill_id,skill_name,cooldown,initial_delay,use_priority,trigger_condition,skill_color
-mon998,玖玖巴,10,sk998,魅惑妖狐,2,0,10,always,#FF66B2
-mon998,玖玖巴,1,sk000,信仰元力,2,1,1,always,#00FF00
+mon998,玖玖巴,10,sk058,明鏡止水,3,0,10,always,#FF66B2
+mon998,玖玖巴,1,sk059,浮文逆流,3,1,1,always,#00FF00
+mon998,玖玖巴,5,sk060,雙極天幕,3,2,5,always,#00FF00
 mon001,小史萊姆,9,sk003,撞擊,3.5,0,9,always,#CC6600
 mon002,大史萊姆,9,sk003,撞擊,3.5,0,9,always,#CC6600
 mon003,怨靈史萊姆,7,sk004,怨念,10,1,7,always,#FF66B2
