@@ -29,8 +29,8 @@ mon014,哥布林治癒侍,1,sk019,草包治療,5,0,1,ally_HP_below_90,#00FF00
 mon014,哥布林治癒侍,3,sk011,聖療術,15,0,3,ally_HP_below_70,#00FF00
 mon014,哥布林治癒侍,5,sk013,戰鬥法陣,20,1,5,always,#FFFF99
 mon015,哥布林法師,5,sk007,火球,5,0,5,always,#FF66B2
-mon015,哥布林法師,6,sk008,冰箭,5,0,6,always,#FF66B2
-mon015,哥布林法師,7,sk009,落雷,5,0,7,always,#FF66B2
+mon015,哥布林法師,5,sk008,冰箭,5,0,5,always,#FF66B2
+mon015,哥布林法師,5,sk009,落雷,5,0,5,always,#FF66B2
 mon016,哥布林薩滿,7,sk020,地裂,5,2,7,always,#FF66B2
 mon016,哥布林薩滿,6,sk021,黑暗侵蝕,5,1,6,always,#B266FF
 mon016,哥布林薩滿,5,sk022,黑闇降臨,5,0,5,always,#B266FF
