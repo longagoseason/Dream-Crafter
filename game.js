@@ -4051,6 +4051,8 @@ function configuredDmgEffectMultiplier(caster, skill, effect, allowAttributeScal
 }
 
 const REACTION_EFFECT_TYPES = new Set(["Counter", "PReflect", "MReflect", "HReflect", "Reflect"]);
+const ATTACK_SKILL_DAMAGE_TYPES = new Set(["physical", "magic", "hybrid"]);
+const GROUP_EFFECT_TARGET_TYPES = new Set(["ally_aoe", "enemy_aoe", "aoe", "ALLaoe"]);
 
 function configuredReactionEffectPercent(skill, effect) {
   const raw = String(effect.value ?? "").trim();
@@ -4167,6 +4169,21 @@ function mainDamageForTarget(context, target) {
   return Math.max(0, Number(context.mainDamageByTarget?.get?.(target)) || 0);
 }
 
+function mainDamageWasEvaded(skill, target, context = {}) {
+  if (!ATTACK_SKILL_DAMAGE_TYPES.has(skill?.damage_type)) return false;
+  if (!context.mainTargets?.includes?.(target)) return false;
+  return context.mainEvadedByTarget?.get?.(target) === true;
+}
+
+function effectApplicationTargets(skill, targets, context = {}) {
+  return targets.filter((target) => target?.hp > 0 && !mainDamageWasEvaded(skill, target, context));
+}
+
+function shouldAggregateEffectLog(effect) {
+  return GROUP_EFFECT_TARGET_TYPES.has(effect?.target)
+    && !["DMG", "DOT", "HP", "MP", "HPleech", "MPleech"].includes(effect?.stat);
+}
+
 function logAppliedDot(caster, skill, target, damagePerSecond, seconds, context = {}) {
   const dotText = `每秒受到 ${formatExactNumber(damagePerSecond)} 點持續傷害，持續 ${formatExactNumber(seconds)} 秒。`;
   addLog(`${caster.name} 的 ${skill.name} 使 ${target.name} ${dotText}`, {
@@ -4248,9 +4265,11 @@ function executeMonsterSkill(enemy, skill, skillColor) {
   const mainTargets = resolveSkillTargetSet(enemy, skill.damage_target, allies, opponents);
   let mainDamageTotal = 0;
   const mainDamageByTarget = new Map(mainTargets.map((target) => [target, 0]));
+  const mainEvadedByTarget = new Map(mainTargets.map((target) => [target, false]));
   if (["physical", "magic", "hybrid"].includes(skill.damage_type)) {
     for (const target of mainTargets) {
       const result = executeSkillDamageComponent(enemy, target, skill, { channel: "monster", skillColor, baseDamage: skill.base_damage });
+      mainEvadedByTarget.set(target, result.dodged === true);
       if (result.hit) {
         const actualDamage = Number(result.damageDealt) || 0;
         mainDamageTotal += actualDamage;
@@ -4265,7 +4284,7 @@ function executeMonsterSkill(enemy, skill, skillColor) {
       logSkillRecovery(enemy, skill, target, recovery, { channel: "monster", skillColor }, result.critical.isCritical);
     }
   }
-  applyConfiguredSkillEffects(enemy, skill, { channel: "monster", skillColor, allies, opponents, mainTargets, mainDamageTotal, mainDamageByTarget, baseDamage: skill.base_damage });
+  applyConfiguredSkillEffects(enemy, skill, { channel: "monster", skillColor, allies, opponents, mainTargets, mainDamageTotal, mainDamageByTarget, mainEvadedByTarget, baseDamage: skill.base_damage });
 }
 
 function monsterEffectTargets(enemy, targetType) {
@@ -4274,16 +4293,20 @@ function monsterEffectTargets(enemy, targetType) {
 
 function skillEffectTargetLabel(targetType, targets) {
   if (targetType === "self") return "自己";
-  if (targetType === "ally_aoe") return "友方全體人員";
+  if (targetType === "ally_aoe") return "我方全體成員";
   if (["aoe", "enemy_aoe"].includes(targetType)) return "敵方全體成員";
-  if (targetType === "ALLaoe") return "戰場全體成員";
+  if (targetType === "ALLaoe") return "敵我雙方";
   return targets.map((target) => target.name).join("、");
 }
 
 function logAppliedSkillEffect(casterName, skill, effect, value, targets, skillColor, channel) {
   if (!targets.length) return;
   const targetLabel = skillEffectTargetLabel(effect.target, targets);
-  addLog(`${casterName} 的 ${skill.name} 對 ${targetLabel} 造成 ${effect.stat} ${value >= 0 ? "+" : ""}${formatEnhancementValue(effect.stat, value)} 效果，持續 ${formatExactNumber(effect.seconds)} 秒。`,
+  const effectText = `${effect.stat} ${value >= 0 ? "+" : ""}${formatEnhancementValue(effect.stat, value)} 效果，持續 ${formatExactNumber(effect.seconds)} 秒。`;
+  const text = effect.target === "ALLaoe"
+    ? `${casterName} 的 ${skill.name} 使 ${targetLabel}承受 ${effectText}`
+    : `${casterName} 的 ${skill.name} 對 ${targetLabel} 造成 ${effectText}`;
+  addLog(text,
     { channel, skillName: skill.name, skillColor });
 }
 
@@ -4410,12 +4433,13 @@ function applyConfiguredSkillEffects(caster, skill, context) {
       const seconds = Number(effect.seconds);
       if (reactionPercent === null || !(seconds > 0) || !Number.isFinite(seconds)) continue;
       const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
-      for (const target of targets.filter((candidate) => candidate.hp > 0)) {
-        if (effect.stat === "Counter" && effect.target === "DMGchoose" && context.mainDamageByTarget?.has?.(target) && !(mainDamageForTarget(context, target) > 0)) continue;
+      const aggregateLog = shouldAggregateEffectLog(effect);
+      for (const target of effectApplicationTargets(skill, targets, context)) {
         if (addTimedReactionEffect(target, caster, skill, effect, reactionPercent, context.skillColor)) {
-          logAppliedSkillEffect(caster.name, skill, effect, effect.stat === "Counter" ? -reactionPercent : reactionPercent, [target], context.skillColor, context.channel);
+          if (!aggregateLog) logAppliedSkillEffect(caster.name, skill, effect, effect.stat === "Counter" ? -reactionPercent : reactionPercent, [target], context.skillColor, context.channel);
         }
       }
+      if (aggregateLog && targets.length) logAppliedSkillEffect(caster.name, skill, effect, effect.stat === "Counter" ? -reactionPercent : reactionPercent, targets, context.skillColor, context.channel);
       continue;
     }
     if (effect.stat === "DMG") {
@@ -4440,7 +4464,7 @@ function applyConfiguredSkillEffects(caster, skill, context) {
       const seconds = Number(effect.seconds);
       if (!parsed.valid || !(seconds > 0) || !Number.isFinite(seconds)) continue;
       const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
-      for (const target of targets.filter((candidate) => candidate.hp > 0)) {
+      for (const target of effectApplicationTargets(skill, targets, context)) {
         const damagePerSecond = parsed.percentage ? mainDamageForTarget(context, target) * parsed.value / 100 : parsed.value;
         if (addTimedDotEffect(target, caster, skill, effect, damagePerSecond, context.skillColor)) {
           logAppliedDot(caster, skill, target, damagePerSecond, seconds, context);
@@ -4450,17 +4474,24 @@ function applyConfiguredSkillEffects(caster, skill, context) {
     }
     const targets = resolveSkillTargetSet(caster, effect.target, context.allies, context.opponents, context.mainTargets);
     if (["HP", "MP"].includes(effect.stat)) {
-      for (const target of targets.filter((candidate) => candidate.hp > 0)) {
+      for (const target of effectApplicationTargets(skill, targets, context)) {
         const value = configuredEffectAmount(caster, skill, effect, target, context);
         applyDirectResourceEffect(caster, skill, effect, target, value, context);
       }
       continue;
     }
     const livingTargets = targets.filter((candidate) => candidate.hp > 0);
-    for (const target of livingTargets) {
+    const aggregateLog = shouldAggregateEffectLog(effect);
+    const aggregateValue = aggregateLog
+      ? livingTargets.map((target) => configuredEffectAmount(caster, skill, effect, target, context)).find((value) => value !== 0)
+      : null;
+    for (const target of effectApplicationTargets(skill, livingTargets, context)) {
       const value = configuredEffectAmount(caster, skill, effect, target, context);
-      if (addTimedSkillEffect(target, caster, skill, effect, value, context.skillColor)) logAppliedSkillEffect(caster.name, skill, effect, value, [target], context.skillColor, context.channel);
+      if (addTimedSkillEffect(target, caster, skill, effect, value, context.skillColor) && !aggregateLog) {
+        logAppliedSkillEffect(caster.name, skill, effect, value, [target], context.skillColor, context.channel);
+      }
     }
+    if (aggregateLog && aggregateValue !== undefined) logAppliedSkillEffect(caster.name, skill, effect, aggregateValue, livingTargets, context.skillColor, context.channel);
   }
 }
 
@@ -4632,8 +4663,10 @@ function executeDamageSkill(actor, skill) {
     baseDamage: Number(skill.base_damage || 0) };
   context.mainDamageTotal = 0;
   context.mainDamageByTarget = new Map(mainTargets.map((target) => [target, 0]));
+  context.mainEvadedByTarget = new Map(mainTargets.map((target) => [target, false]));
   for (const target of mainTargets) {
     const result = executeSkillDamageComponent(actor, target, skill, context);
+    context.mainEvadedByTarget.set(target, result.dodged === true);
     if (result.hit) {
       const actualDamage = Number(result.damageDealt) || 0;
       context.mainDamageTotal += actualDamage;
