@@ -258,17 +258,29 @@ const transitionDelay = (milliseconds) => new Promise((resolve) => window.setTim
 
 function updatePauseButton() { if ($("#pause-button")) $("#pause-button").textContent = state.paused ? "繼續" : "暫停"; }
 
-function forceSafeTown() {
+function resetCombatRuntimeState() {
+  const runtimeUnits = [...(state.roster ?? []), ...(state.enemies ?? [])];
+  for (const unit of runtimeUnits) {
+    unit.buffs = [];
+    unit.casting = null;
+    unit.skillCooldowns = {};
+    unit.cooldown = 0;
+  }
   state.enemies = [];
   state.spawnElapsed = 0;
-  for (const hero of state.roster) { hero.buffs = []; hero.casting = null; hero.skillCooldowns = {}; }
+  dotInstanceSequence = 0;
+}
+
+function forceSafeTown() {
+  resetCombatRuntimeState();
   state.map = null;
   enterTown(false);
   state.townAutoReturn = false;
 }
 
 function resetRuntimeFromSave(saved) {
-  state.enemies = []; state.inventory = []; state.bigStorage = []; state.collections = []; state.gold = 0; state.drops = []; state.autoSellItemIds = new Set();
+  resetCombatRuntimeState();
+  state.inventory = []; state.bigStorage = []; state.collections = []; state.gold = 0; state.drops = []; state.autoSellItemIds = new Set();
   state.elapsed = 0; state.spawnElapsed = 0; state.savedMapId = null; state.previousMapId = null; state.townAutoReturn = false;
   state.adventureStartedAt = null; state.claimedRewards = new Set(); state.rewardGroupOpenState = {}; state.rewardView = "available";
   buildParty();
