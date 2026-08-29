@@ -59,7 +59,7 @@ thief,殘影亂斬,csk508,18,25,0,#CC6600,physical,front,18,200,0,TRUE,ASPD,self
 thief,消失,csk509,23,50,60,#FFFF00,buff,none,0,0,0,TRUE,AAR,self,5,60,DEX,0.1,SAR,self,5,60,DEX,0.1,TRUE,37,,,,[成長] | [buff]
 thief,致命突刺,csk510,27,30,0,#CC6600,physical,front,27,220,0,TRUE,CRI,self,5,10,DEX,0.1,,,,,,,TRUE,85,,,,[成長]
 thief,盜賊的自我修養 Lv.31,csk511,31,100,300,#FFFF00,buff,none,0,0,0,TRUE,CRI,self,5,60,DEX,0.2,CRI_DMG,self,60,60,DEX,0.2,TRUE,9,,,,[成長] | [buff]
-spellblade,攻擊,csk600,1,0,0,#FFFFFF,hybrid,front,0,100,0,FALSE,,,,,,,,,,,,,TRUE,100,self_hp_above_mp_below,,,
+spellblade,攻擊,csk600,1,0,0,#FFFFFF,hybrid,front,0,100,0,FALSE,,,,,,,,,,,,,TRUE,100,,,,
 spellblade,魔力斬擊,csk601,1,8,0,#BF55EC,hybrid,front,0,120,0,TRUE,,,,,,,,,,,,,TRUE,99,,,,
 spellblade,魔劍之道,csk602,3,1,60,#FFFF00,buff,none,0,0,0,TRUE,MATK,self,1,60,INT,0.2,MPR,self,-0.2,60,INT,0.04,TRUE,39,,,,[成長] | [buff]
 spellblade,注魔氣刃斬,csk603,5,33,0,#BF55EC,hybrid,aoe,5,100,0,TRUE,,,,,,,,,,,,,TRUE,69,,,,[犧牲] | [成長] | [buff]
