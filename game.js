@@ -124,7 +124,7 @@ async function init() {
       state.paused = true;
     }
     updatePauseButton();
-    if (saveLoaded) openWelcomePanel();
+    if (saveLoaded) openWelcomePanel("patch");
     $("#pause-button").addEventListener("click", togglePause);
     $("#save-status").textContent = `${saveLoaded ? "進度已載入" : "新存檔"} · ${DreamerSaveManager.storageMode === "indexeddb" ? "瀏覽器存檔" : "本機 JSON"}`;
     setInterval(persistPlayerSave, 5000);
@@ -1827,6 +1827,7 @@ async function switchSaveSlot(slotId, suppliedSave = null) {
   });
   await renderSaveManagerPanel();
   if ($("#save-manager-dialog")?.open) $("#save-manager-dialog").close();
+  openWelcomePanel("patch");
   showSaveManagerMessage("讀取完成：已回到 town001 並暫停，請按「繼續」恢復遊戲。", false);
 }
 
@@ -1846,6 +1847,7 @@ async function startNewGameInSlot(slotId) {
   });
   await renderSaveManagerPanel();
   if ($("#save-manager-dialog")?.open) $("#save-manager-dialog").close();
+  openWelcomePanel("welcome");
   showSaveManagerMessage("新遊戲建立完成：目前位於 town001 並暫停。", false);
 }
 
@@ -1860,6 +1862,7 @@ async function resetImportedSlot() {
   });
   await renderSaveManagerPanel();
   if ($("#save-manager-dialog")?.open) $("#save-manager-dialog").close();
+  openWelcomePanel("patch");
   showSaveManagerMessage("Imported Working Copy 已由 Original 重建。", false);
 }
 
@@ -1934,6 +1937,7 @@ function setupSaveManagerPanel() {
       message.textContent = "匯入成功；Original 已保留，Working Copy 已載入 town001 並暫停。";
       message.classList.remove("error");
       await renderSaveManagerPanel();
+      openWelcomePanel("patch");
     } catch (error) {
       message.textContent = `匯入失敗：${error.message}`;
       message.classList.add("error");
@@ -2018,15 +2022,15 @@ function renderWelcomeDialogContent() {
   else renderWelcomePanel();
 }
 
-function openWelcomePanel() {
+function openWelcomePanel(initialView = "welcome") {
   const dialog = $("#welcome-dialog");
-  state.welcomeView = "welcome";
+  state.welcomeView = initialView === "patch" ? "patch" : "welcome";
   renderWelcomeDialogContent();
   if (!dialog.open) dialog.showModal();
 }
 
 function setupWelcomePanel() {
-  $("#welcome-button").addEventListener("click", openWelcomePanel);
+  $("#welcome-button").addEventListener("click", () => openWelcomePanel("welcome"));
   $("#welcome-view-toggle").addEventListener("click", () => {
     state.welcomeView = state.welcomeView === "welcome" ? "patch" : "welcome";
     renderWelcomeDialogContent();
