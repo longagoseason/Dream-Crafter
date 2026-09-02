@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dreamer · 三人隊伍放置 RPG</title>
   <link rel="icon" type="image/png" href="./assets/images/Dreamer_logo.png">
-  <link rel="stylesheet" href="./style.css?v=20260823-reward-history">
+  <link rel="stylesheet" href="./style.css?v=20260903-inventory-warehouse-focus">
 </head>
 <body>
   <main class="game-layout">
@@ -97,7 +97,9 @@
       <article id="right-warehouse-page" class="box right-page warehouse-box" hidden>
         <nav class="warehouse-tabs" aria-label="倉庫功能"><button type="button" class="active" data-warehouse-mode="big">大倉庫</button><button type="button" data-warehouse-mode="collection">收藏庫</button></nav>
         <section id="big-storage-panel" class="storage-panel">
-          <div class="storage-heading"><strong>大倉庫</strong><span id="big-storage-count">0 / 200</span></div>
+          <div class="storage-heading"><strong>大倉庫</strong><span id="big-storage-count">0 / 0</span></div>
+          <nav id="warehouse-primary-filters" class="warehouse-filter-row" aria-label="大倉庫分類"></nav>
+          <div id="warehouse-secondary-filters" class="warehouse-secondary-filters" aria-label="大倉庫次分類"></div>
           <div id="big-storage-pages" class="inventory-pages" aria-label="大倉庫頁面"></div>
           <div id="big-storage-grid" class="inventory-grid storage-grid" aria-label="大倉庫物品"></div>
         </section>
@@ -140,7 +142,7 @@
     <div id="status-dialog-grid" class="status-dialog-layout" aria-label="六名戰場成員狀態"></div>
   </dialog>
   <dialog id="character-info-dialog" class="attribute-dialog character-info-dialog">
-    <div class="dialog-title"><strong>角色資訊</strong><button id="character-info-close" type="button" aria-label="關閉">×</button></div>
+    <div class="dialog-title"><strong class="character-info-title">角色資訊 <small>勾選框只代表「關注屬性」用來裝備比較，無其他用處。</small></strong><button id="character-info-close" type="button" aria-label="關閉">×</button></div>
     <nav id="character-info-characters" class="attribute-characters" aria-label="選擇角色資訊">
       <button type="button" data-character="A">A 牧</button>
       <button type="button" data-character="B">B 法</button>
@@ -232,7 +234,7 @@
     <div><strong>資料轉換中，請稍後</strong><span>正在安全停止遊戲並處理存檔…</span></div>
   </div>
   <dialog id="enhance-dialog" class="attribute-dialog enhance-dialog">
-    <div class="dialog-title"><strong>裝備強化</strong><button id="enhance-close" type="button" aria-label="關閉">×</button></div>
+    <div class="dialog-title"><strong>裝備強化</strong><span class="enhance-dialog-actions"><button id="enhance-backpack-toggle" type="button">背包強化</button><button id="enhance-close" type="button" aria-label="關閉">×</button></span></div>
     <nav id="enhance-characters" class="attribute-characters" aria-label="選擇強化角色">
       <button type="button" data-character="A">牧師</button>
       <button type="button" data-character="B">法師</button>
@@ -241,11 +243,16 @@
     <div class="enhance-layout">
       <section>
         <p id="enhance-class" class="enhance-class">牧師</p>
-        <div id="enhance-equipment-grid" class="equipment-grid enhance-equipment-grid">
+        <div id="enhance-equipped-panel"><div id="enhance-equipment-grid" class="equipment-grid enhance-equipment-grid">
           <button type="button" data-slot="necklace_1" data-position="necklace">項鍊</button><button type="button" data-slot="earrings_1" data-position="earrings">耳環</button><button type="button" data-slot="helmet_1" data-position="helmet">頭盔</button><button type="button" data-slot="earrings_2" data-position="earrings">耳環</button><div class="enhance-set-control" aria-label="選擇要強化的裝備套裝"><button type="button" data-enhance-set="1">Set 1</button><button type="button" data-enhance-set="2">Set 2</button></div>
           <span class="equipment-blank" aria-hidden="true"></span><button type="button" data-slot="weapon_1" data-position="weapon">武器</button><button type="button" data-slot="body_1" data-position="body">盔甲</button><button type="button" data-slot="shield_1" data-position="shield">副手</button><span class="equipment-blank" aria-hidden="true"></span>
           <button type="button" data-slot="ring_1" data-position="ring">戒指</button><button type="button" data-slot="ring_2" data-position="ring">戒指</button><button type="button" data-slot="kneepads_1" data-position="kneepads">護膝</button><button type="button" data-slot="ring_3" data-position="ring">戒指</button><button type="button" data-slot="ring_4" data-position="ring">戒指</button>
           <button type="button" data-slot="idol_1" data-position="idol">神像</button><button type="button" data-slot="gloves_1" data-position="gloves">手套</button><button type="button" data-slot="shoe_1" data-position="shoe">鞋子</button><button type="button" data-slot="gloves_2" data-position="gloves">手套</button><button type="button" data-slot="core_1" data-position="core">核心</button>
+        </div></div>
+        <div id="enhance-backpack-panel" class="enhance-backpack-panel" hidden>
+          <div id="enhance-backpack-filters" class="equipment-position-filters" aria-label="背包強化裝備分類"></div>
+          <div id="enhance-backpack-pages" class="inventory-pages" aria-label="背包強化頁面"></div>
+          <div id="enhance-backpack-grid" class="inventory-grid enhance-backpack-grid" aria-label="背包裝備"></div>
         </div>
         <p id="enhance-owned-gold" class="enhance-owned-gold">持有 0 金幣</p>
         <p id="enhance-cost-summary" class="enhance-cost-summary">請先選擇裝備</p>
@@ -280,6 +287,6 @@
   <script src="./csvLoader.js?v=20260817-status-effects"></script>
   <script src="./runtimePlatform.js?v=20260811-csv-no-store"></script>
   <script src="./saveManager.js?v=20260812-save-slots"></script>
-  <script src="./game.js?v=20260823-reward-history"></script>
+  <script src="./game.js?v=20260903-focus-no-aspd"></script>
 </body>
 </html>

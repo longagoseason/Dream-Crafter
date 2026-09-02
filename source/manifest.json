@@ -1,12 +1,13 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-30T09:28:33.778Z",
+  "generatedAt": "2026-09-02T23:33:40.665Z",
   "numberFields": [
     "AAR",
     "AC",
     "ADAM",
     "ASPD",
     "ATK",
+    "Backpack",
     "CON",
     "CRI",
     "CRI_DMG",
@@ -26,6 +27,7 @@
     "SAR",
     "STR",
     "WIS",
+    "Warehouse",
     "attack_speed",
     "base_AAR",
     "base_AC",
@@ -80,6 +82,7 @@
     "required_exp",
     "sell_gold",
     "skill_order",
+    "sort",
     "spawn_cd",
     "spawn_rate",
     "star_count",
@@ -121,8 +124,8 @@
   ],
   "csvFiles": [
     {
-      "file": "Dreamer_Syetem - Dreamer_Syetem.csv",
-      "logicalFile": "Dreamer_Syetem.csv",
+      "file": "Dreamer_System - Dreamer_System.csv",
+      "logicalFile": "Dreamer_System.csv",
       "table": "dreamerSystem",
       "required": [
         "exp_multiplier",
@@ -132,7 +135,9 @@
         "recover_rate",
         "town_recover",
         "Homepage_title",
-        "Death_EXP_Penalty"
+        "Death_EXP_Penalty",
+        "Backpack",
+        "Warehouse"
       ],
       "expectedHeaders": [
         "Homepage_title",
@@ -145,7 +150,9 @@
         "Death_EXP_Penalty",
         "mid_fig_size",
         "AAR_SAR_max",
-        "armor_rate"
+        "armor_rate",
+        "Backpack",
+        "Warehouse"
       ],
       "id": []
     },
@@ -199,6 +206,24 @@
       "id": [
         "monster_id",
         "item_id"
+      ]
+    },
+    {
+      "file": "EQ_position - EQ_position.csv",
+      "logicalFile": "EQ_position.csv",
+      "table": "equipmentPositions",
+      "required": [
+        "EQ_position",
+        "EQ_name",
+        "sort"
+      ],
+      "expectedHeaders": [
+        "EQ_position",
+        "EQ_name",
+        "sort"
+      ],
+      "id": [
+        "EQ_position"
       ]
     },
     {
@@ -598,6 +623,7 @@
       "expectedHeaders": [
         "class_id",
         "class_name",
+        "levelup_att",
         "base_ATK",
         "base_MATK",
         "base_CRI",
@@ -617,7 +643,11 @@
         "INT",
         "WIS",
         "DEX",
-        "LUK"
+        "LUK",
+        "initial_weapon",
+        "initial_body",
+        "initial_item",
+        "initial_item_value"
       ],
       "id": [
         "class_id"

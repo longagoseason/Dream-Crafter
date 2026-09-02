@@ -61,3 +61,7 @@ right_DOT_color,#FF007F,DOT的顏色
 Reward_not_get,#FF0000,Reward還沒領取的顏色
 right_counter_color,#FFE5CC,反擊的顏色
 right_reflict_color,#FFCCFF,反射的顏色
+positive_name,#00FF00,比較時，正向數字顏色
+negative_name,#FF0000,比較時，負向數字顏色
+zero_name,#FFFFFF,比較時，0的顏色
+focas_name,#FFFF00,關注屬性顏色

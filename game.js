@@ -1,12 +1,10 @@
 "use strict";
 
 const TICK_MS = 100;
-const INVENTORY_MAX_SLOTS = 1000;
 const INVENTORY_RESERVE_SLOTS = 10;
 const INVENTORY_SLOT_SIZE = 60;
 const INVENTORY_SLOT_GAP = 3;
 const INVENTORY_MAX_PAGE_BUTTONS = 10;
-const BIG_STORAGE_MAX_SLOTS = 200;
 const COLLECTION_PAGE_COUNT = 10;
 const SLOT_PATTERN_BASE = "./assets/slot-patterns/";
 const DEFAULT_MID_FIG_COLOR = "#A0A0A0";
@@ -28,9 +26,10 @@ const EQUIPMENT_SLOTS = [
 const state = {
   data: null, map: null, previousMapId: null, roster: [], party: [], enemies: [], gold: 0, drops: [], inventory: [], inventoryPage: 0, inventoryPageCapacity: 36, inventoryColumns: 6, inventoryRows: 6, inventoryPageWindowStart: 0,
   equipmentCharacter: "A", equipmentEditSets: {}, infoCharacter: "A", attributeCharacter: "A", skillCharacter: "A", enhanceCharacter: "A", enhanceEquipmentSet: 1, enhanceEquipmentSlot: null,
+  enhanceSource: "equipped", enhanceInventoryItemUuid: null, enhanceInventoryFilter: "all", enhanceInventoryPage: 0, enhanceInventoryPageCapacity: 20,
   enhanceSelectedAttribute: null, enhanceSelectedType: "bless", enhanceStoneKeys: { bless: null, curse: null, chaos: null }, enhanceReturnStoneKey: null, enhanceOperation: null, shopMode: "buy", rightPage: "battle", battleLogChannel: "all", elapsed: 0, spawnElapsed: 0, paused: false, lastTime: 0, savePending: false, savePromise: null, saveTransition: false, currentSlot: null,
   savedMapId: null, townAutoReturn: false, teamName: "隊伍", autoSellItemIds: new Set(), welcomeView: "welcome", patchNoteSeries: null,
-  mapMenuOpenGroups: new Set(), warehouseMode: "big", bigStorage: [], bigStoragePage: 0, bigStoragePageCapacity: 30, bigStorageColumns: 5, bigStorageRows: 6,
+  mapMenuOpenGroups: new Set(), warehouseMode: "big", warehouseCategory: "all", warehouseEquipmentPosition: "all", warehouseSkillClass: "all", bigStorage: [], bigStoragePage: 0, bigStoragePageCapacity: 30, bigStorageColumns: 5, bigStorageRows: 6,
   collections: [], collectionPage: 0, collectionInventoryPage: 0, collectionInventoryCapacity: 30, collectionStoragePage: 0, collectionStorageCapacity: 30,
   adventureStartedAt: null, claimedRewards: new Set(), rewardGroupOpenState: {}, rewardView: "available", validRewardIds: new Set(), validRewardDates: new Set(),
 };
@@ -56,7 +55,7 @@ function aarSarMaximum() {
   const warningKey = "invalid:AAR_SAR_max";
   if (!runtimeWarningKeys.has(warningKey)) {
     runtimeWarningKeys.add(warningKey);
-    console.warn("[WARN] Dreamer_Syetem.csv AAR_SAR_max is invalid; fallback to 95%.");
+    console.warn("[WARN] Dreamer_System.csv AAR_SAR_max is invalid; fallback to 95%.");
   }
   return 95;
 }
@@ -67,7 +66,7 @@ function configuredArmorRate() {
   const warningKey = "invalid:armor_rate";
   if (!runtimeWarningKeys.has(warningKey)) {
     runtimeWarningKeys.add(warningKey);
-    console.warn("[WARN] Dreamer_Syetem.csv armor_rate is invalid; fallback to 2.");
+    console.warn("[WARN] Dreamer_System.csv armor_rate is invalid; fallback to 2.");
   }
   return 2;
 }
@@ -167,6 +166,7 @@ function exportPlayerSave() {
       equipment: serializeEquipmentMap(hero.equipmentSets["1"]),
       equipmentSets: { "1": serializeEquipmentMap(hero.equipmentSets["1"]), "2": serializeEquipmentMap(hero.equipmentSets["2"]) }, activeEquipmentSet: hero.activeEquipmentSet,
       levelPlan: hero.levelPlan, growthStats: hero.growthStats,
+      focusedAttributes: [...(hero.focusedAttributes ?? [])],
       hp: hero.hp, mp: hero.mp, learnedSkillIds: [...hero.learnedSkillIds], skillEnabled: hero.skillEnabled,
       skillSettings: hero.skillSettings,
       recoverySettings: hero.recoverySettings,
@@ -185,6 +185,7 @@ function applyPlayerSave(saved) {
   for (const hero of state.roster) {
     const source = savedByClass.get(hero.classId);
     if (!source) continue;
+    const cls = state.data.classes.find((row) => row.class_id === hero.classId);
     hero.customName = normalizeCharacterName(source.customName);
     hero.name = hero.customName || hero.className;
     hero.slot = source.slot ?? null;
@@ -193,7 +194,8 @@ function applyPlayerSave(saved) {
     hero.exp = Math.max(0, Number(source.exp) || 0);
     hero.attributes = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, Math.max(0, Number(source.attributes?.[key]) || 0)]));
     initializeEquipmentSets(hero, source.equipmentSets ?? { "1": source.equipment ?? {}, "2": {} }, source.activeEquipmentSet);
-    hero.levelPlan = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, clamp(Math.trunc(Number(source.levelPlan?.[key]) || 0), 0, 5)]));
+    hero.levelPlan = normalizeLevelPlan(source.levelPlan, cls);
+    hero.focusedAttributes = new Set((source.focusedAttributes ?? []).filter((key) => focusableAttributeKeys().includes(key)));
     hero.growthStats = Object.fromEntries(DERIVED_STAT_KEYS.map((key) => [key, Math.max(0, Number(source.growthStats?.[key] ?? (key === "HP" ? source.hpGrowth : key === "MP" ? source.mpGrowth : 0)) || 0)]));
     hero.learnedSkillIds = new Set((source.learnedSkillIds ?? []).filter((skillId) => state.data.characterSkills.some((skill) => skill.skill_id === skillId && skill.class_id === hero.classId)));
     hero.skillEnabled = { ...(source.skillEnabled ?? {}) };
@@ -219,9 +221,9 @@ function applyPlayerSave(saved) {
   state.party = ["A", "B", "C"].map((slot) => state.roster.find((hero) => hero.slot === slot));
   state.gold = Math.max(0, Math.trunc(Number(saved.gold) || 0));
   state.teamName = normalizeTeamName(saved.teamName);
-  state.inventory = normalizePortableEntries(saved.inventory ?? [], INVENTORY_MAX_SLOTS, "inventoryIndex");
+  state.inventory = normalizePortableEntries(saved.inventory ?? [], inventoryMaximumSlots(), "inventoryIndex");
   normalizeInventoryIndices();
-  state.bigStorage = normalizePortableEntries(saved.bigStorage ?? saved.warehouse ?? [], BIG_STORAGE_MAX_SLOTS, "storageIndex");
+  state.bigStorage = normalizePortableEntries(saved.bigStorage ?? saved.warehouse ?? [], warehouseMaximumSlots(), "storageIndex");
   state.collections = normalizeCollections(saved.collections ?? saved.collectionStorage ?? []);
   const legacyAdventureTime = saved.adventure_started_at ?? saved.savedAt;
   state.adventureStartedAt = validAdventureTimestamp(legacyAdventureTime) ? new Date(legacyAdventureTime).toISOString() : new Date().toISOString();
@@ -318,7 +320,7 @@ async function runSaveTransition(operation) {
 function validateGameData(data) {
   const requiredTables = [
     "classes", "equipment", "item", "characterAttribute", "attributeIndex", "characterSkills", "monsters", "monsterSkills", "skill",
-    "map", "mapSpawn", "lootDrops", "specialLoot", "playerLevel", "dreamerSystem", "gameColorIndex", "enhanceLevel", "enhanceSaveEnchant", "enhanceOverEnchant", "enhanceChaosEnchant", "welcomeNews", "patchNotes", "rewards",
+    "map", "mapSpawn", "lootDrops", "specialLoot", "playerLevel", "dreamerSystem", "equipmentPositions", "gameColorIndex", "enhanceLevel", "enhanceSaveEnchant", "enhanceOverEnchant", "enhanceChaosEnchant", "welcomeNews", "patchNotes", "rewards",
   ];
   const missing = requiredTables.filter((key) => !Array.isArray(data?.[key]));
   if (missing.length) throw new Error(`資料版本不相容，缺少資料表：${missing.join("、")}`);
@@ -360,6 +362,14 @@ function playerSkillLogColor(skill) {
 
 function systemSettings() {
   return state.data.dreamerSystem[0];
+}
+
+function inventoryMaximumSlots() {
+  return Number(systemSettings().Backpack);
+}
+
+function warehouseMaximumSlots() {
+  return Number(systemSettings().Warehouse);
 }
 
 function validAdventureTimestamp(value) {
@@ -548,7 +558,7 @@ function renderRewardPanel() {
 }
 
 function rewardHasInventoryCapacity(validation) {
-  const freeSlots = Math.max(0, INVENTORY_MAX_SLOTS - state.inventory.length);
+  const freeSlots = Math.max(0, inventoryMaximumSlots() - state.inventory.length);
   if (validation.type === "equipment") return freeSlots >= validation.value;
   if (validation.type === "item") return state.inventory.some((entry) => !entry.isEquipment && entry.itemId === validation.rowId) || freeSlots >= 1;
   return true;
@@ -1111,22 +1121,60 @@ function ensureEnhancementMidFlashKeyframes(waitSeconds) {
   return name;
 }
 
-function equipmentTooltipModel(item, action, instance = null) {
-  if (!item) return null;
+function equipmentInstanceStats(item, instance) {
   const bonus = enhancementBonus(instance);
-  const statValue = (key) => Number(item[key] ?? 0) + Number(bonus[key] ?? 0);
+  return Object.fromEntries([...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS].map((key) => [key, roundStat(Number(item?.[key] ?? 0) + Number(bonus[key] ?? 0))]));
+}
+
+function equipmentComparisonSlots(item, hero) {
+  if (!hero) return [];
+  const resolved = resolvedEquipmentForSet(hero);
+  return compatibleEquipmentSlots(item).map((slot) => {
+    const equipped = resolved[slot.key]?.instance ?? null;
+    const equippedItem = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
+    const matchingItem = equippedItem?.EQ_position === item.EQ_position ? equippedItem : null;
+    return { key: slot.key, stats: matchingItem ? equipmentInstanceStats(matchingItem, equipped) : Object.fromEntries([...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS].map((key) => [key, 0])) };
+  });
+}
+
+function equipmentComparisonSlotLabel(slotKey) {
+  const match = String(slotKey).match(/^(.*)_(\d+)$/);
+  const position = match?.[1] ?? slotKey;
+  const number = match?.[2] ?? "";
+  const label = sortedEquipmentPositions().find((row) => row.EQ_position === position)?.EQ_name ?? equipmentSlotLabel(position);
+  return `${label}${number}`;
+}
+
+function equipmentTooltipModel(item, action, instance = null, comparisonHero = null) {
+  if (!item) return null;
+  const stats = equipmentInstanceStats(item, instance);
+  const comparisonSlots = equipmentComparisonSlots(item, comparisonHero);
+  const focused = comparisonHero?.focusedAttributes ?? new Set();
+  const statValue = (key) => stats[key];
   const formatStat = (key) => {
     const value = statValue(key);
-    return { key, value, text: `${key}${value > 0 ? "+" : ""}${formatEnhancementValue(key, value)}` };
+    return {
+      key, value, text: `${key}${value > 0 ? "+" : ""}${formatEnhancementValue(key, value)}`,
+      focused: focused.has(key),
+      comparisons: focused.has(key) ? comparisonSlots.map((slot) => roundStat(value - slot.stats[key])) : [],
+    };
   };
   const primary = DERIVED_STAT_KEYS
-    .map((key) => [key, Number(item[key] ?? 0) + Number(bonus[key] ?? 0)])
+    .map((key) => [key, stats[key]])
     .filter(([, value]) => value)
     .map(([key]) => formatStat(key));
   const attributes = ATTRIBUTE_KEYS
     .map((key) => formatStat(key))
     .filter(({ value }) => value);
   const enhancement = normalizeEnhancement(instance);
+  const presentKeys = new Set([...primary, ...attributes].map((row) => row.key));
+  const otherFocused = focusableAttributeKeys().filter((key) => focused.has(key) && !presentKeys.has(key))
+    .map((key) => ({
+      key,
+      comparisons: comparisonSlots.map((slot) => roundStat(-slot.stats[key])),
+      equippedValues: comparisonSlots.map((slot) => slot.stats[key]),
+    }))
+    .filter((row) => row.equippedValues.some((value) => value !== 0));
   return {
     title: equipmentDisplayName(item, instance),
     itemLevel: Number(item.item_level),
@@ -1136,6 +1184,8 @@ function equipmentTooltipModel(item, action, instance = null) {
     returned: enhancement.returnCount,
     primary,
     attributes,
+    otherFocused,
+    comparisonOrder: comparisonSlots.length > 1 ? comparisonSlots.map((slot) => equipmentComparisonSlotLabel(slot.key)) : [],
     action,
   };
 }
@@ -1153,14 +1203,14 @@ function equipmentTooltip(item, action, instance = null) {
   return lines.join("\n");
 }
 
-function assignEquipmentTooltip(element, item, action, instance = null) {
+function assignEquipmentTooltip(element, item, action, instance = null, comparisonHero = null) {
   if (!element) return;
   if (!item) {
     equipmentTooltipModels.delete(element);
     delete element.dataset.equipmentTooltip;
     return;
   }
-  equipmentTooltipModels.set(element, equipmentTooltipModel(item, action, instance));
+  equipmentTooltipModels.set(element, equipmentTooltipModel(item, action, instance, comparisonHero));
   element.dataset.equipmentTooltip = "true";
   if (typeof element.removeAttribute === "function") element.removeAttribute("title");
   else element.title = "";
@@ -1186,16 +1236,47 @@ function renderEquipmentTooltip(popup, model) {
     popup.append(headings);
   }
 
+  const appendStat = (host, stat, includeValue = true) => {
+    if (!stat) return;
+    const base = document.createElement("span");
+    base.textContent = includeValue ? stat.text : stat.key;
+    if (stat.focused || !includeValue) base.style.color = indexedColor("focas_name");
+    host.append(base);
+    if (stat.comparisons?.length) {
+      const comparison = document.createElement("small"); comparison.className = "equipment-tooltip-comparison";
+      comparison.append(" (");
+      stat.comparisons.forEach((difference, index) => {
+        if (index) comparison.append(" / ");
+        const value = document.createElement("span");
+        value.textContent = difference > 0 ? `+${formatExactNumber(difference)}` : difference < 0 ? formatExactNumber(difference) : "0";
+        value.style.color = indexedColor(difference > 0 ? "positive_name" : difference < 0 ? "negative_name" : "zero_name");
+        comparison.append(value);
+      });
+      comparison.append(")");
+      host.append(comparison);
+    }
+  };
   const rowCount = Math.max(model.primary.length, model.attributes.length);
   for (let index = 0; index < rowCount; index++) {
     const row = document.createElement("div");
     row.className = "equipment-tooltip-row";
     const primary = document.createElement("span");
-    primary.textContent = model.primary[index]?.text ?? "";
+    appendStat(primary, model.primary[index]);
     const attribute = document.createElement("span");
-    attribute.textContent = model.attributes[index]?.text ?? "";
+    appendStat(attribute, model.attributes[index]);
     row.append(primary, attribute);
     popup.append(row);
+  }
+
+  if (model.otherFocused?.length) {
+    const heading = document.createElement("strong"); heading.className = "equipment-tooltip-other-title"; heading.textContent = "其他關注屬性"; popup.append(heading);
+    for (const stat of model.otherFocused) {
+      const row = document.createElement("div"); row.className = "equipment-tooltip-row equipment-tooltip-other-row";
+      const content = document.createElement("span"); appendStat(content, stat, false); row.append(content); popup.append(row);
+    }
+  }
+  if (model.comparisonOrder?.length) {
+    const order = document.createElement("small"); order.className = "equipment-tooltip-order"; order.textContent = `比較順序：${model.comparisonOrder.join(" / ")}`; popup.append(order);
   }
 
   if (model.action) {
@@ -1292,14 +1373,14 @@ function inventoryEntryAt(inventoryIndex) {
 }
 
 function usedInventoryIndices(excluding = null) {
-  return new Set(state.inventory.filter((entry) => entry !== excluding).map((entry) => entry.inventoryIndex).filter((index) => Number.isInteger(index) && index >= 0 && index < INVENTORY_MAX_SLOTS));
+  return new Set(state.inventory.filter((entry) => entry !== excluding).map((entry) => entry.inventoryIndex).filter((index) => Number.isInteger(index) && index >= 0 && index < inventoryMaximumSlots()));
 }
 
 function firstFreeInventoryIndex(preferredIndex = null, excluding = null) {
   const used = usedInventoryIndices(excluding);
   const preferred = Number(preferredIndex);
-  if (Number.isInteger(preferred) && preferred >= 0 && preferred < INVENTORY_MAX_SLOTS && !used.has(preferred)) return preferred;
-  for (let index = 0; index < INVENTORY_MAX_SLOTS; index++) if (!used.has(index)) return index;
+  if (Number.isInteger(preferred) && preferred >= 0 && preferred < inventoryMaximumSlots() && !used.has(preferred)) return preferred;
+  for (let index = 0; index < inventoryMaximumSlots(); index++) if (!used.has(index)) return index;
   return -1;
 }
 
@@ -1307,12 +1388,12 @@ function compactInventory() {
   state.inventory = state.inventory
     .map((entry, order) => ({ entry, order, index: Number(entry.inventoryIndex) }))
     .sort((left, right) => {
-      const leftValid = Number.isInteger(left.index) && left.index >= 0 && left.index < INVENTORY_MAX_SLOTS;
-      const rightValid = Number.isInteger(right.index) && right.index >= 0 && right.index < INVENTORY_MAX_SLOTS;
+      const leftValid = Number.isInteger(left.index) && left.index >= 0 && left.index < inventoryMaximumSlots();
+      const rightValid = Number.isInteger(right.index) && right.index >= 0 && right.index < inventoryMaximumSlots();
       if (leftValid !== rightValid) return leftValid ? -1 : 1;
       return leftValid && left.index !== right.index ? left.index - right.index : left.order - right.order;
     })
-    .slice(0, INVENTORY_MAX_SLOTS)
+    .slice(0, inventoryMaximumSlots())
     .map(({ entry }, inventoryIndex) => { entry.inventoryIndex = inventoryIndex; return entry; });
   state.inventoryPage = clamp(state.inventoryPage, 0, inventoryPageCount() - 1);
   state.inventoryPageWindowStart = clamp(state.inventoryPageWindowStart, 0, Math.max(0, inventoryPageCount() - INVENTORY_MAX_PAGE_BUTTONS));
@@ -1334,7 +1415,7 @@ function removeInventoryEntryAt(arrayIndex) {
 function inventoryPageCount() {
   const capacity = Math.max(1, state.inventoryPageCapacity);
   const highest = state.inventory.reduce((maximum, entry) => Math.max(maximum, Number(entry.inventoryIndex) || 0), -1);
-  const accessibleSlots = Math.min(INVENTORY_MAX_SLOTS, Math.max(capacity, highest + 1 + INVENTORY_RESERVE_SLOTS));
+  const accessibleSlots = Math.min(inventoryMaximumSlots(), Math.max(capacity, highest + 1 + INVENTORY_RESERVE_SLOTS));
   return Math.max(1, Math.ceil(accessibleSlots / capacity));
 }
 
@@ -1401,8 +1482,8 @@ function buildParty() {
     const classId = cls.class_id;
     const attributes = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, cls[key] ?? 0]));
     const hero = { id: slot ?? classId, slot, className: cls.class_name, customName: "", name: cls.class_name, classId, level: 1, exp: 0, attributes,
-      levelPlan: defaultLevelPlan(attributes), growthStats: Object.fromEntries(DERIVED_STAT_KEYS.map((key) => [key, 0])), hp: 0, mp: 0, cooldown: 0,
-      learnedSkillIds: new Set(), skillEnabled: {}, skillSettings: {}, skillCooldowns: {}, itemCooldowns: {}, casting: null, buffs: [],
+      levelPlan: defaultLevelPlan(cls), growthStats: Object.fromEntries(DERIVED_STAT_KEYS.map((key) => [key, 0])), hp: 0, mp: 0, cooldown: 0,
+      learnedSkillIds: new Set(), skillEnabled: {}, skillSettings: {}, skillCooldowns: {}, itemCooldowns: {}, casting: null, buffs: [], focusedAttributes: new Set(),
       recoverySettings: { hpEnabled: true, hpPercent: 20, hpItemId: null, mpEnabled: true, mpPercent: 20, mpItemId: null }, resetAvailableAt: 0 };
     initializeEquipmentSets(hero);
     assignInitialEquipment(hero, cls);
@@ -1453,11 +1534,24 @@ function updateCharacterControls() {
   }
 }
 
-function defaultLevelPlan(attributes) {
+function defaultLevelPlan(cls) {
   const plan = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, 0]));
-  const primary = ATTRIBUTE_KEYS.reduce((best, key) => attributes[key] > attributes[best] ? key : best, ATTRIBUTE_KEYS[0]);
-  plan[primary] = 5;
+  const primary = String(cls?.levelup_att ?? "").trim();
+  if (ATTRIBUTE_KEYS.includes(primary)) {
+    plan[primary] = 5;
+    return plan;
+  }
+  const warningKey = `invalid:levelup_att:${cls?.class_id ?? "unknown"}:${primary}`;
+  if (!runtimeWarningKeys.has(warningKey)) {
+    runtimeWarningKeys.add(warningKey);
+    console.warn(`[WARN] classes.csv levelup_att is invalid: class_id=${cls?.class_id ?? "unknown"}, value=${primary || "(blank)"}.`);
+  }
   return plan;
+}
+
+function normalizeLevelPlan(value, cls) {
+  const plan = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, clamp(Math.trunc(Number(value?.[key]) || 0), 0, 5)]));
+  return ATTRIBUTE_KEYS.reduce((total, key) => total + plan[key], 0) === 5 ? plan : defaultLevelPlan(cls);
 }
 
 function heroGear(hero) {
@@ -1572,6 +1666,32 @@ function setupCharacterInfoPanel() {
       renderCharacterInfoPanel();
     });
   }
+  const grid = $("#character-info-grid");
+  grid.addEventListener("change", (event) => {
+    const input = event.target.closest?.("input[data-focus-attribute]");
+    const hero = state.party.find((member) => member.slot === state.infoCharacter);
+    if (!input || !hero || !grid.contains(input)) return;
+    if (input.checked) hero.focusedAttributes.add(input.dataset.focusAttribute);
+    else hero.focusedAttributes.delete(input.dataset.focusAttribute);
+    renderInventory();
+    if (state.rightPage === "warehouse") renderWarehouse();
+    persistPlayerSave();
+  });
+  grid.addEventListener("click", (event) => {
+    const button = event.target.closest?.("button[data-focus-action]");
+    const hero = state.party.find((member) => member.slot === state.infoCharacter);
+    if (!button || !hero || !grid.contains(button)) return;
+    hero.focusedAttributes = button.dataset.focusAction === "all" ? new Set(focusableAttributeKeys()) : new Set();
+    renderCharacterInfoPanel();
+    renderInventory();
+    if (state.rightPage === "warehouse") renderWarehouse();
+    persistPlayerSave();
+  });
+}
+
+function focusableAttributeKeys() {
+  const allowed = new Set([...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS]);
+  return (state.data?.attributeIndex ?? []).map((row) => row.Attribute).filter((key) => allowed.has(key));
 }
 
 function signedStat(value, digits = null) {
@@ -1591,7 +1711,9 @@ function indexedAttributeLabel(attribute) {
 
 function characterInfoStat(attribute, value, numericValue = null) {
   return {
+    attribute,
     label: indexedAttributeLabel(attribute),
+    focusable: focusableAttributeKeys().includes(attribute),
     value,
     valueClass: Number(numericValue) < 0 ? "negative-value" : "positive-value",
     title: attributeDefinition(attribute)?.document_Attribute ?? "",
@@ -1602,7 +1724,7 @@ function characterInfoCells(hero) {
   const attributes = effectiveAttributes(hero);
   const requiredExp = requiredExpFor(hero.level);
   return [
-    { text: hero.name, className: "header" }, { text: "", className: "header" }, { text: `Lv.${hero.level}`, className: "header right" },
+    { text: hero.name, className: "header character-name" }, { className: "header focus-controls", focusControls: true }, { text: `Lv.${hero.level}`, className: "header right" },
     characterInfoStat("HP", formatExactNumber(hero.hp)), characterInfoStat("MP", formatExactNumber(hero.mp)), characterInfoStat("EXP", hero.level >= 100 ? "MAX" : `${formatExactNumber(hero.exp)}/${formatCompactNumber(requiredExp ?? 0)}`),
     characterInfoStat("ATK", signedStat(combatStat(hero, "ATK")), combatStat(hero, "ATK")), characterInfoStat("AC", signedStat(combatStat(hero, "AC")), combatStat(hero, "AC")), characterInfoStat("STR", signedStat(attributes.STR), attributes.STR),
     characterInfoStat("MATK", signedStat(combatStat(hero, "MATK")), combatStat(hero, "MATK")), characterInfoStat("MR", signedStat(combatStat(hero, "MR")), combatStat(hero, "MR")), characterInfoStat("CON", signedStat(attributes.CON), attributes.CON),
@@ -1620,17 +1742,46 @@ function renderCharacterInfoPanel() {
   document.querySelectorAll("#character-info-characters button").forEach((button) => button.classList.toggle("active", button.dataset.character === hero.slot));
   const cells = characterInfoCells(hero);
   const grid = $("#character-info-grid");
-  grid.replaceChildren(...cells.map((cell) => {
-    const element = document.createElement("div");
-    element.className = `character-info-cell ${cell.className ?? ""}`.trim();
-    if (cell.title) element.title = cell.title;
-    if (cell.label) {
-      const label = document.createElement("strong"); label.textContent = cell.label;
-      const value = document.createElement("span"); value.textContent = cell.value; value.className = cell.valueClass ?? "";
-      element.append(label, value);
-    } else element.textContent = cell.text;
-    return element;
-  }));
+  while (grid.children.length < cells.length) grid.append(document.createElement("div"));
+  while (grid.children.length > cells.length) grid.lastElementChild.remove();
+  cells.forEach((cell, index) => {
+    const element = grid.children[index];
+    const className = `character-info-cell ${cell.className ?? ""}`.trim();
+    if (element.className !== className) element.className = className;
+    if (cell.title && element.title !== cell.title) element.title = cell.title;
+    else if (!cell.title && element.hasAttribute("title")) element.removeAttribute("title");
+    const structureKey = cell.focusControls ? "focus-controls" : cell.label && cell.focusable ? `attribute:${cell.attribute}` : `text:${index}`;
+    if (element.dataset.structureKey !== structureKey) {
+      element.dataset.structureKey = structureKey;
+      element.replaceChildren();
+    }
+    if (cell.focusControls) {
+      if (!element.childElementCount) {
+        const label = document.createElement("span"); label.textContent = "關注屬性";
+        const selectAll = document.createElement("button"); selectAll.type = "button"; selectAll.dataset.focusAction = "all"; selectAll.textContent = "全選";
+        const clear = document.createElement("button"); clear.type = "button"; clear.dataset.focusAction = "clear"; clear.textContent = "清除";
+        element.append(label, selectAll, clear);
+      }
+    } else if (cell.label && cell.focusable) {
+      if (!element.childElementCount) {
+        const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.dataset.focusAttribute = cell.attribute;
+        const label = document.createElement("strong");
+        const value = document.createElement("span");
+        element.append(checkbox, label, value);
+      }
+      const [checkbox, label, value] = element.children;
+      const checked = hero.focusedAttributes?.has(cell.attribute) ?? false;
+      if (checkbox.checked !== checked) checkbox.checked = checked;
+      const ariaLabel = `關注 ${cell.attribute}`;
+      if (checkbox.getAttribute("aria-label") !== ariaLabel) checkbox.setAttribute("aria-label", ariaLabel);
+      if (label.textContent !== cell.label) label.textContent = cell.label;
+      if (value.textContent !== cell.value) value.textContent = cell.value;
+      if (value.className !== (cell.valueClass ?? "")) value.className = cell.valueClass ?? "";
+    } else {
+      const text = cell.label ? `${cell.label} ${cell.value}` : cell.text;
+      if (element.textContent !== text) element.textContent = text;
+    }
+  });
 }
 
 function setupAttributePanel() {
@@ -2063,6 +2214,8 @@ function setupEnhancePanel() {
     const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
     state.enhanceEquipmentSet = equipmentSetNumber(hero?.activeEquipmentSet);
     state.enhanceEquipmentSlot = null;
+    state.enhanceSource = "equipped";
+    state.enhanceInventoryItemUuid = null;
     state.enhanceSelectedAttribute = null;
     state.enhanceOperation = null;
     renderEnhancePanel();
@@ -2074,12 +2227,21 @@ function setupEnhancePanel() {
     $("#equipment-tooltip").hidden = true;
     document.body.append($("#equipment-tooltip"));
   });
+  $("#enhance-backpack-toggle").addEventListener("click", () => {
+    state.enhanceSource = state.enhanceSource === "inventory" ? "equipped" : "inventory";
+    state.enhanceEquipmentSlot = null;
+    state.enhanceInventoryItemUuid = null;
+    state.enhanceSelectedAttribute = null;
+    state.enhanceOperation = null;
+    renderEnhancePanel();
+  });
   for (const button of document.querySelectorAll("#enhance-characters button")) {
     button.addEventListener("click", () => {
       state.enhanceCharacter = button.dataset.character;
       const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
       state.enhanceEquipmentSet = equipmentSetNumber(hero?.activeEquipmentSet);
       state.enhanceEquipmentSlot = null;
+      state.enhanceInventoryItemUuid = null;
       state.enhanceSelectedAttribute = null;
       state.enhanceStoneKeys = { bless: null, curse: null, chaos: null };
       state.enhanceReturnStoneKey = null;
@@ -2087,6 +2249,26 @@ function setupEnhancePanel() {
       renderEnhancePanel();
     });
   }
+  const backpackFilters = $("#enhance-backpack-filters");
+  backpackFilters.addEventListener("click", (event) => {
+    const button = delegatedButtonFromEvent(event, backpackFilters, "button[data-equipment-position]");
+    if (!button) return;
+    state.enhanceInventoryFilter = button.dataset.equipmentPosition;
+    state.enhanceInventoryPage = 0;
+    renderEnhancePanel();
+  });
+  const backpackGrid = $("#enhance-backpack-grid");
+  backpackGrid.addEventListener("click", (event) => {
+    const button = delegatedButtonFromEvent(event, backpackGrid, "button[data-item-uuid]");
+    if (!button || button.disabled) return;
+    state.enhanceInventoryItemUuid = button.dataset.itemUuid;
+    state.enhanceEquipmentSlot = null;
+    state.enhanceSelectedAttribute = null;
+    state.enhanceStoneKeys = { bless: null, curse: null, chaos: null };
+    state.enhanceReturnStoneKey = null;
+    state.enhanceOperation = null;
+    renderEnhancePanel();
+  });
   for (const button of document.querySelectorAll("[data-enhance-set]")) {
     button.addEventListener("click", () => {
       state.enhanceEquipmentSet = equipmentSetNumber(button.dataset.enhanceSet);
@@ -2132,10 +2314,11 @@ function setupEnhancePanel() {
     const result = performEquipmentRollback(hero, state.enhanceEquipmentSlot, {
       stoneKey: state.enhanceReturnStoneKey,
       setNumber: state.enhanceEquipmentSet,
+      inventoryItemUuid: state.enhanceSource === "inventory" ? state.enhanceInventoryItemUuid : null,
     });
     addLog(result.message);
     state.enhanceOperation = null;
-    if (result.destroyed) state.enhanceEquipmentSlot = null;
+    if (result.destroyed) { state.enhanceEquipmentSlot = null; state.enhanceInventoryItemUuid = null; }
     showEquipment(state.equipmentCharacter);
     render();
     renderEnhancePanel();
@@ -2143,7 +2326,7 @@ function setupEnhancePanel() {
   });
   $("#enhance-confirm").addEventListener("click", () => {
     const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
-    const equipped = hero ? equipmentConfig(hero, state.enhanceEquipmentSet)?.[state.enhanceEquipmentSlot] : null;
+    const equipped = selectedEnhancementInstance(hero);
     const nextLevel = equipped ? normalizeEnhancement(equipped).level + 1 : 0;
     const operationAllowed = nextLevel <= 4 ? state.enhanceOperation === "safe" : state.enhanceOperation === state.enhanceSelectedType;
     if (!operationAllowed) return;
@@ -2152,16 +2335,24 @@ function setupEnhancePanel() {
       type: state.enhanceSelectedType,
       stoneKey: state.enhanceStoneKeys[state.enhanceSelectedType],
       setNumber: state.enhanceEquipmentSet,
+      inventoryItemUuid: state.enhanceSource === "inventory" ? state.enhanceInventoryItemUuid : null,
     });
     addLog(result.message);
-    const enhancedLevel = equipped ? normalizeEnhancement(equipped).level : 0;
+    const updatedEquipment = selectedEnhancementInstance(hero);
+    const enhancedLevel = updatedEquipment ? normalizeEnhancement(updatedEquipment).level : 0;
     state.enhanceOperation = result.success && enhancedLevel < 4 ? "safe" : null;
-    if (result.destroyed) state.enhanceEquipmentSlot = null;
+    if (result.destroyed) { state.enhanceEquipmentSlot = null; state.enhanceInventoryItemUuid = null; }
     showEquipment(state.equipmentCharacter);
     render();
     renderEnhancePanel();
     persistPlayerSave();
   });
+}
+
+function selectedEnhancementInstance(hero) {
+  if (!hero) return null;
+  if (state.enhanceSource === "inventory") return state.inventory.find((entry) => entry.isEquipment && entry.itemUuid === state.enhanceInventoryItemUuid) ?? null;
+  return equipmentConfig(hero, state.enhanceEquipmentSet)?.[state.enhanceEquipmentSlot] ?? null;
 }
 
 function maximumEnhanceLevel(itemLevel) {
@@ -2283,21 +2474,48 @@ function consumeInventoryEntry(entry) {
   return true;
 }
 
+function resolveEnhancementTarget(hero, equipmentSlot, selection = {}) {
+  if (!hero) return null;
+  const inventoryItemUuid = String(selection.inventoryItemUuid ?? "").trim();
+  if (inventoryItemUuid) {
+    const inventoryArrayIndex = state.inventory.findIndex((entry) => entry.isEquipment && entry.itemUuid === inventoryItemUuid);
+    const entry = state.inventory[inventoryArrayIndex];
+    if (!entry) return null;
+    return {
+      instance: entry,
+      equipped: false,
+      label: "背包",
+      replace(instance) { state.inventory[inventoryArrayIndex] = { ...entry, ...instance, inventoryIndex: entry.inventoryIndex, name: entry.name, quantity: 1, isEquipment: true }; },
+      remove() { removeInventoryEntryAt(inventoryArrayIndex); },
+    };
+  }
+  const setNumber = equipmentSetNumber(selection.setNumber ?? hero.activeEquipmentSet);
+  const equipment = equipmentConfig(hero, setNumber);
+  const instance = equipment?.[equipmentSlot];
+  if (!instance) return null;
+  return {
+    instance,
+    equipped: true,
+    label: `Set ${setNumber}`,
+    replace(normalized) { equipment[equipmentSlot] = normalized; },
+    remove() { delete equipment[equipmentSlot]; },
+  };
+}
+
 function performEquipmentEnhancement(hero, equipmentSlot, selection = {}, random = Math.random) {
-  const setNumber = equipmentSetNumber(selection.setNumber ?? hero?.activeEquipmentSet);
-  const equipment = hero ? equipmentConfig(hero, setNumber) : null;
-  const equipped = equipment?.[equipmentSlot];
+  const target = resolveEnhancementTarget(hero, equipmentSlot, selection);
+  const equipped = target?.instance;
   const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
   if (!hero || !equipped || !item) return { success: false, message: "請先選擇仍然存在的裝備。" };
   const instance = normalizeEquipmentInstance(equipped);
-  equipment[equipmentSlot] = instance;
+  target.replace(instance);
   const enhancement = instance.enhancement;
   const nextLevel = enhancement.level + 1;
   const maximum = maximumEnhanceLevel(item.item_level);
   if (nextLevel > maximum) return {
     success: false,
     reason: "maximum_level",
-    message: `Set ${setNumber} 的 ${equipmentDisplayName(item, instance)}（裝備等級 ${item.item_level}）強化上限為 +${maximum}；未消耗金幣或強化石。`,
+    message: `${target.label} 的 ${equipmentDisplayName(item, instance)}（裝備等級 ${item.item_level}）強化上限為 +${maximum}；未消耗金幣或強化石。`,
   };
   const levelSetting = nextLevel >= 5 ? state.data.enhanceLevel.find((row) => row.enhance_level === nextLevel) : null;
   if (nextLevel >= 5 && (!levelSetting || !levelSetting.enabled)) return { success: false, message: `+${nextLevel} 尚未由 Enhance_level.csv 開放。` };
@@ -2311,7 +2529,7 @@ function performEquipmentEnhancement(hero, equipmentSlot, selection = {}, random
     enhancement.level = nextLevel;
     addEnhancementValues(enhancement.safeBonus, { [option.stat]: option.value });
     enhancement.history.push({ level: nextLevel, type: "safe", attribute: option.stat, value: option.value, cost });
-    recalculateHeroStats(hero);
+    if (target.equipped) recalculateHeroStats(hero);
     return { success: true, destroyed: false, cost, message: `${item.item_name} 強化為 +${nextLevel}，${option.stat} +${formatEnhancementValue(option.stat, option.value)}，消耗 ${cost.toLocaleString()} 金幣。` };
   }
 
@@ -2324,8 +2542,8 @@ function performEquipmentEnhancement(hero, equipmentSlot, selection = {}, random
   state.gold -= cost;
   consumeInventoryEntry(stoneEntry);
   if (random() * 100 >= actualSuccessRate) {
-    delete equipment[equipmentSlot];
-    recalculateHeroStats(hero);
+    target.remove();
+    if (target.equipped) recalculateHeroStats(hero);
     return {
       success: false, destroyed: true, cost, actualSuccessRate,
       message: `${equipmentDisplayName(item, instance)} 強化 +${nextLevel} 失敗並永久消失；消耗 ${cost.toLocaleString()} 金幣與 ${stone.item_name}。`,
@@ -2348,7 +2566,7 @@ function performEquipmentEnhancement(hero, equipmentSlot, selection = {}, random
     level: nextLevel, type, stone_item_id: stone.item_id, base_success_rate: levelSetting.success_rate,
     stone_bonus: stoneBonus, actual_success_rate: actualSuccessRate, cost, results,
   });
-  recalculateHeroStats(hero);
+  if (target.equipped) recalculateHeroStats(hero);
   const resultText = Object.entries(results).map(([stat, value]) => `${stat} ${value >= 0 ? "+" : ""}${formatEnhancementValue(stat, value)}`).join("、");
   return {
     success: true, destroyed: false, cost, actualSuccessRate, results,
@@ -2366,13 +2584,12 @@ function subtractEnhancementValues(target, values) {
 }
 
 function performEquipmentRollback(hero, equipmentSlot, selection = {}, random = Math.random) {
-  const setNumber = equipmentSetNumber(selection.setNumber ?? hero?.activeEquipmentSet);
-  const equipment = hero ? equipmentConfig(hero, setNumber) : null;
-  const equipped = equipment?.[equipmentSlot];
+  const target = resolveEnhancementTarget(hero, equipmentSlot, selection);
+  const equipped = target?.instance;
   const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
   if (!hero || !equipped || !item) return { success: false, message: "請先選擇仍然存在的裝備。" };
   const instance = normalizeEquipmentInstance(equipped);
-  equipment[equipmentSlot] = instance;
+  target.replace(instance);
   const enhancement = instance.enhancement;
   const currentLevel = enhancement.level;
   if (currentLevel < 5) return { success: false, message: "裝備最低只能倒回至 +4。" };
@@ -2391,8 +2608,8 @@ function performEquipmentRollback(hero, equipmentSlot, selection = {}, random = 
   state.gold -= cost;
   consumeInventoryEntry(stoneEntry);
   if (random() * 100 >= actualSuccessRate) {
-    delete equipment[equipmentSlot];
-    recalculateHeroStats(hero);
+    target.remove();
+    if (target.equipped) recalculateHeroStats(hero);
     return {
       success: false, destroyed: true, cost, actualSuccessRate,
       message: `${equipmentDisplayName(item, instance)} 倒回至 +${currentLevel - 1} 失敗並永久消失；消耗 ${cost.toLocaleString()} 金幣與 ${stone.item_name}。`,
@@ -2409,7 +2626,7 @@ function performEquipmentRollback(hero, equipmentSlot, selection = {}, random = 
   enhancement.history.splice(lastEntryIndex, 1);
   enhancement.level = currentLevel - 1;
   enhancement.returnCount += 1;
-  recalculateHeroStats(hero);
+  if (target.equipped) recalculateHeroStats(hero);
   return {
     success: true, destroyed: false, cost, actualSuccessRate, removed: lastEntry,
     message: `${item.item_name} 已倒回至 +${enhancement.level}，最後一次${enhancementTypeLabel(lastEntry.type)}強化結果已移除。`,
@@ -2433,7 +2650,7 @@ function renderEnhancePanelLegacy() {
     button.classList.toggle("selected", button.dataset.slot === state.enhanceEquipmentSlot && Boolean(item));
     button.textContent = item ? equipmentButtonText(item, equipped) : equipmentSlotLabel(button.dataset.position.split(",")[0]);
     applyEnhancementVisual(button, equipped, item);
-    assignEquipmentTooltip(button, item, `Set ${selectedSet}；點擊選擇`, equipped);
+    assignEquipmentTooltip(button, item, `Set ${selectedSet}；點擊選擇`, equipped, hero);
     if (!item) button.title = "尚未裝備";
   }
 
@@ -2547,9 +2764,55 @@ function renderEnhancementHistory(enhancement = emptyEnhancement()) {
 }
 
 // The current enhancement view keeps controls compact and dedicates the third column to persisted history.
+function renderEnhanceBackpack(hero) {
+  const filters = $("#enhance-backpack-filters");
+  const rows = [document.createElement("div"), document.createElement("div")];
+  rows.forEach((row) => row.className = "warehouse-filter-row");
+  for (const position of sortedEquipmentPositions()) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.equipmentPosition = position.EQ_position;
+    button.textContent = position.EQ_name;
+    button.classList.toggle("active", state.enhanceInventoryFilter === position.EQ_position);
+    rows[Number(position.sort) <= 7 ? 0 : 1].append(button);
+  }
+  filters.replaceChildren(...rows.filter((row) => row.childElementCount));
+  const entries = state.inventory.filter((entry) => {
+    if (!entry.isEquipment) return false;
+    if (state.enhanceInventoryFilter === "all") return true;
+    return state.data.equipment.find((item) => item.item_id === entry.itemId)?.EQ_position === state.enhanceInventoryFilter;
+  });
+  const pageCount = Math.max(1, Math.ceil(entries.length / state.enhanceInventoryPageCapacity));
+  state.enhanceInventoryPage = clamp(state.enhanceInventoryPage, 0, pageCount - 1);
+  const grid = $("#enhance-backpack-grid");
+  rebuildPortableGrid(grid, state.enhanceInventoryPageCapacity);
+  grid.style.setProperty("--inventory-columns", 5);
+  grid.style.setProperty("--inventory-rows", Math.ceil(state.enhanceInventoryPageCapacity / 5));
+  const start = state.enhanceInventoryPage * state.enhanceInventoryPageCapacity;
+  [...grid.children].forEach((button, visibleIndex) => {
+    const entry = entries[start + visibleIndex] ?? null;
+    renderPortableEntryCell(button, entry, "空白背包裝備格");
+    button.dataset.itemUuid = entry?.itemUuid ?? "";
+    button.classList.toggle("selected", Boolean(entry && entry.itemUuid === state.enhanceInventoryItemUuid));
+    if (entry) {
+      button.setAttribute("aria-label", `選擇強化 ${entry.name}`);
+      assignEquipmentTooltip(button, catalogItem(entry.itemId), "點擊選擇背包強化目標", entry, hero);
+    }
+  });
+  renderGenericPagination($("#enhance-backpack-pages"), Math.max(1, entries.length), state.enhanceInventoryPageCapacity, state.enhanceInventoryPage, (page) => {
+    state.enhanceInventoryPage = page;
+    renderEnhancePanel();
+  });
+}
+
 function renderEnhancePanel() {
   const hero = state.party.find((member) => member.slot === state.enhanceCharacter);
   if (!hero) return;
+  const inventoryMode = state.enhanceSource === "inventory";
+  $("#enhance-equipped-panel").hidden = inventoryMode;
+  $("#enhance-backpack-panel").hidden = !inventoryMode;
+  $("#enhance-backpack-toggle").textContent = inventoryMode ? "穿戴強化" : "背包強化";
+  if (inventoryMode) renderEnhanceBackpack(hero);
   document.querySelectorAll("#enhance-characters button").forEach((button) => button.classList.toggle("active", button.dataset.character === hero.slot));
   $("#enhance-class").textContent = hero.className;
   $("#enhance-owned-gold").textContent = `持有 ${state.gold.toLocaleString()} 金幣`;
@@ -2565,10 +2828,10 @@ function renderEnhancePanel() {
     button.classList.toggle("selected", button.dataset.slot === state.enhanceEquipmentSlot && Boolean(item));
     button.textContent = item ? equipmentButtonText(item, equipped) : equipmentSlotLabel(button.dataset.position.split(",")[0]);
     applyEnhancementVisual(button, equipped, item);
-    assignEquipmentTooltip(button, item, `Set ${selectedSet}：點選後強化`, equipped);
+    assignEquipmentTooltip(button, item, `Set ${selectedSet}：點選後強化`, equipped, hero);
   }
 
-  const equipped = equipment[state.enhanceEquipmentSlot];
+  const equipped = selectedEnhancementInstance(hero);
   const item = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
   const options = $("#enhance-attribute-options");
   const specialControls = $("#enhance-special-controls");
@@ -2743,9 +3006,10 @@ function resetHero(classId, now = Date.now()) {
   for (const equipmentSet of Object.values(hero.equipmentSets)) {
     for (const equipped of Object.values(equipmentSet)) returnEquippedItemToInventory(equipped);
   }
+  const retainedLevelPlan = normalizeLevelPlan(hero.levelPlan, cls);
   hero.level = 1; hero.exp = 0;
   hero.attributes = Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, cls[key] ?? 0]));
-  hero.levelPlan = defaultLevelPlan(hero.attributes);
+  hero.levelPlan = retainedLevelPlan;
   hero.growthStats = Object.fromEntries(DERIVED_STAT_KEYS.map((key) => [key, 0]));
   initializeEquipmentSets(hero);
   state.equipmentEditSets[hero.classId] = 1;
@@ -2974,7 +3238,8 @@ function setupWarehouse() {
   }
   setupTransferQuantityDialog();
   setupCollectionDialog();
-  setupPortableGridDelegation($("#big-storage-grid"), (visibleIndex) => useBigStorageCell(visibleIndex));
+  setupPortableGridDelegation($("#big-storage-grid"), (_visibleIndex, button) => useBigStorageCell(Number(button.dataset.actualIndex)));
+  setupWarehouseFilterDelegation();
   setupCollectionEquipmentDelegation($("#collection-equipment-grid"));
   setupPortableGridDelegation($("#collection-inventory-grid"), (visibleIndex) => moveEquipmentToCollection("inventory", state.collectionInventoryPage * state.collectionInventoryCapacity + visibleIndex));
   setupPortableGridDelegation($("#collection-storage-grid"), (visibleIndex) => moveEquipmentToCollection("storage", state.collectionStoragePage * state.collectionStorageCapacity + visibleIndex));
@@ -2990,12 +3255,12 @@ function setupWarehouse() {
 function portableEntryAt(entries, indexKey, index) { return entries.find((entry) => entry[indexKey] === index) ?? null; }
 
 function compactBigStorage() {
-  state.bigStorage = state.bigStorage.slice(0, BIG_STORAGE_MAX_SLOTS).map((entry, storageIndex) => { entry.storageIndex = storageIndex; return entry; });
-  state.bigStoragePage = clamp(state.bigStoragePage, 0, Math.max(0, Math.ceil(BIG_STORAGE_MAX_SLOTS / Math.max(1, state.bigStoragePageCapacity)) - 1));
+  state.bigStorage = state.bigStorage.slice(0, warehouseMaximumSlots()).map((entry, storageIndex) => { entry.storageIndex = storageIndex; return entry; });
+  state.bigStoragePage = clamp(state.bigStoragePage, 0, Math.max(0, Math.ceil(warehouseMaximumSlots() / Math.max(1, state.bigStoragePageCapacity)) - 1));
   return state.bigStorage;
 }
 
-function firstFreeBigStorageIndex() { return state.bigStorage.length < BIG_STORAGE_MAX_SLOTS ? state.bigStorage.length : -1; }
+function firstFreeBigStorageIndex() { return state.bigStorage.length < warehouseMaximumSlots() ? state.bigStorage.length : -1; }
 
 function floatingGridMetrics(grid, headerHeight = 0) {
   const styles = getComputedStyle(grid);
@@ -3026,7 +3291,7 @@ function setupPortableGridDelegation(grid, handler) {
   grid.addEventListener("click", (event) => {
     const button = delegatedButtonFromEvent(event, grid, "button[data-visible-index]");
     if (!button || button.disabled || !grid.contains(button)) return;
-    handler(Number(button.dataset.visibleIndex));
+    handler(Number(button.dataset.visibleIndex), button);
   });
 }
 
@@ -3049,11 +3314,17 @@ function delegatedButtonFromEvent(event, container, selector) {
   return button && container.contains(button) ? button : null;
 }
 
-function renderPortableEntryCell(cell, entry, emptyLabel = "空白格") {
+function renderPortableEntryCell(cell, entry, emptyLabel = "空白格", comparisonHero = null) {
+  const renderSignature = JSON.stringify(entry
+    ? [entry.source, entry.itemUuid ?? "", entry.itemId ?? "", entry.quantity ?? 0, entry.enhancementLevel ?? 0, entry.enhancementRoll ?? 0,
+      comparisonHero?.classId ?? "", Array.from(comparisonHero?.focusedAttributes ?? []).sort()]
+    : ["empty", comparisonHero?.classId ?? "", Array.from(comparisonHero?.focusedAttributes ?? []).sort()]);
+  if (cell.dataset.renderSignature === renderSignature) return;
+  cell.dataset.renderSignature = renderSignature;
   const item = entry ? catalogItem(entry.itemId) : null;
   cell.textContent = entry ? inventoryButtonText(entry) : "";
   applyEnhancementVisual(cell, entry?.isEquipment ? entry : null, item);
-  if (entry?.isEquipment) assignEquipmentTooltip(cell, item, "點擊移動", entry);
+  if (entry?.isEquipment) assignEquipmentTooltip(cell, item, "點擊移動", entry, comparisonHero);
   else { assignEquipmentTooltip(cell, null, "", null); cell.title = entry ? `${itemTooltip(item)}\n數量 ${entry.quantity}` : ""; }
   cell.disabled = !entry;
   cell.setAttribute("aria-label", entry ? `移動 ${entry.name}` : emptyLabel);
@@ -3101,7 +3372,7 @@ function recalculateBigStorageLayout() {
     capacity: Math.max(1, state.inventoryPageCapacity),
   };
   state.bigStorageColumns = metrics.columns; state.bigStorageRows = metrics.rows; state.bigStoragePageCapacity = metrics.capacity;
-  state.bigStoragePage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.ceil(BIG_STORAGE_MAX_SLOTS / metrics.capacity) - 1);
+  state.bigStoragePage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.max(0, Math.ceil(filteredBigStorageEntries().length / metrics.capacity) - 1));
   applyGridMetrics(grid, metrics);
   rebuildPortableGrid(grid, metrics.capacity);
   renderBigStorageGrid();
@@ -3109,10 +3380,110 @@ function recalculateBigStorageLayout() {
 
 function renderBigStorageGrid() {
   const grid = $("#big-storage-grid"); if (!grid) return;
+  renderWarehouseFilters();
+  const filtered = filteredBigStorageEntries();
+  state.bigStoragePage = clamp(state.bigStoragePage, 0, Math.max(0, Math.ceil(filtered.length / state.bigStoragePageCapacity) - 1));
   const start = state.bigStoragePage * state.bigStoragePageCapacity;
-  [...grid.children].forEach((cell, visibleIndex) => renderPortableEntryCell(cell, portableEntryAt(state.bigStorage, "storageIndex", start + visibleIndex), "空白倉庫格"));
-  renderGenericPagination($("#big-storage-pages"), BIG_STORAGE_MAX_SLOTS, state.bigStoragePageCapacity, state.bigStoragePage, (page) => { state.bigStoragePage = page; renderBigStorageGrid(); });
-  $("#big-storage-count").textContent = `${state.bigStorage.length} / ${BIG_STORAGE_MAX_SLOTS}`;
+  [...grid.children].forEach((cell, visibleIndex) => {
+    const entry = filtered[start + visibleIndex] ?? null;
+    cell.dataset.actualIndex = entry ? String(entry.storageIndex) : "";
+    renderPortableEntryCell(cell, entry, "空白倉庫格", state.party.find((hero) => hero.slot === state.equipmentCharacter) ?? state.party[0]);
+  });
+  renderGenericPagination($("#big-storage-pages"), Math.max(1, filtered.length), state.bigStoragePageCapacity, state.bigStoragePage, (page) => { state.bigStoragePage = page; renderBigStorageGrid(); });
+  $("#big-storage-count").textContent = `${state.bigStorage.length} / ${warehouseMaximumSlots()}`;
+}
+
+function sortedEquipmentPositions() {
+  return [...(state.data?.equipmentPositions ?? [])].sort((left, right) => Number(left.sort) - Number(right.sort));
+}
+
+function warehouseEntryCategory(entry) {
+  if (entry?.isEquipment) return "equipment";
+  return state.data.item.find((item) => item.item_id === entry?.itemId)?.effect === "learn_skill" ? "skillbook" : "item";
+}
+
+function filteredBigStorageEntries() {
+  return state.bigStorage.filter((entry) => {
+    const category = warehouseEntryCategory(entry);
+    if (state.warehouseCategory !== "all" && category !== state.warehouseCategory) return false;
+    if (category === "equipment" && state.warehouseEquipmentPosition !== "all") {
+      return state.data.equipment.find((item) => item.item_id === entry.itemId)?.EQ_position === state.warehouseEquipmentPosition;
+    }
+    if (category === "skillbook" && state.warehouseSkillClass !== "all") {
+      return state.data.item.find((item) => item.item_id === entry.itemId)?.target === state.warehouseSkillClass;
+    }
+    return true;
+  });
+}
+
+function createWarehouseFilterButton(value, label, active, kind) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.warehouseFilter = kind;
+  button.dataset.filterValue = value;
+  button.textContent = label;
+  button.classList.toggle("active", active);
+  return button;
+}
+
+function renderWarehouseFilters() {
+  const primary = $("#warehouse-primary-filters");
+  const secondary = $("#warehouse-secondary-filters");
+  if (!primary || !secondary) return;
+  const primaryOptions = [
+    ["all", "全部"], ["equipment", "裝備"], ["item", "道具"], ["skillbook", "技能書"],
+  ];
+  const primarySignature = JSON.stringify([state.warehouseCategory, primaryOptions]);
+  if (primary.dataset.renderSignature !== primarySignature) {
+    primary.dataset.renderSignature = primarySignature;
+    primary.replaceChildren(...primaryOptions.map(([value, label]) => createWarehouseFilterButton(value, label, state.warehouseCategory === value, "category")));
+  }
+  const positions = sortedEquipmentPositions();
+  const skillbookClassIds = new Set(state.data.item.filter((item) => item.effect === "learn_skill").map((item) => item.target).filter(Boolean));
+  const skillbookClasses = state.data.classes.filter((candidate) => skillbookClassIds.has(candidate.class_id));
+  const secondarySignature = JSON.stringify([
+    state.warehouseCategory,
+    state.warehouseEquipmentPosition,
+    state.warehouseSkillClass,
+    positions.map((position) => [position.EQ_position, position.EQ_name, position.sort]),
+    skillbookClasses.map((cls) => [cls.class_id, cls.class_name]),
+  ]);
+  if (secondary.dataset.renderSignature === secondarySignature) return;
+  secondary.dataset.renderSignature = secondarySignature;
+  secondary.replaceChildren();
+  if (state.warehouseCategory === "equipment") {
+    const rows = [document.createElement("div"), document.createElement("div")];
+    rows.forEach((row) => row.className = "warehouse-filter-row");
+    for (const position of positions) {
+      const row = Number(position.sort) <= 7 ? rows[0] : rows[1];
+      row.append(createWarehouseFilterButton(position.EQ_position, position.EQ_name, state.warehouseEquipmentPosition === position.EQ_position, "equipment-position"));
+    }
+    secondary.append(...rows.filter((row) => row.childElementCount));
+  } else if (state.warehouseCategory === "skillbook") {
+    const row = document.createElement("div"); row.className = "warehouse-filter-row";
+    row.append(createWarehouseFilterButton("all", "全部", state.warehouseSkillClass === "all", "skill-class"));
+    for (const cls of skillbookClasses) {
+      row.append(createWarehouseFilterButton(cls.class_id, cls.class_name, state.warehouseSkillClass === cls.class_id, "skill-class"));
+    }
+    secondary.append(row);
+  }
+}
+
+function setupWarehouseFilterDelegation() {
+  for (const container of [$("#warehouse-primary-filters"), $("#warehouse-secondary-filters")]) {
+    if (!container || container.dataset.delegatedClick === "true") continue;
+    container.dataset.delegatedClick = "true";
+    container.addEventListener("click", (event) => {
+      const button = delegatedButtonFromEvent(event, container, "button[data-warehouse-filter]");
+      if (!button) return;
+      const value = button.dataset.filterValue;
+      if (button.dataset.warehouseFilter === "category") state.warehouseCategory = value;
+      else if (button.dataset.warehouseFilter === "equipment-position") state.warehouseEquipmentPosition = value;
+      else if (button.dataset.warehouseFilter === "skill-class") state.warehouseSkillClass = value;
+      state.bigStoragePage = 0;
+      renderBigStorageGrid();
+    });
+  }
 }
 
 function renderWarehouse() {
@@ -3163,7 +3534,7 @@ async function transferInventoryToBigStorage(inventoryIndex) {
   if (!entry) return false;
   const quantity = entry.isEquipment ? 1 : await requestTransferQuantity("存放", entry.name, entry.quantity);
   if (!quantity) return false;
-  if (!addPortableEntry(state.bigStorage, "storageIndex", BIG_STORAGE_MAX_SLOTS, entry, quantity)) { addLog("大倉庫已滿，無法存放物品。", { channel: "other" }); return false; }
+  if (!addPortableEntry(state.bigStorage, "storageIndex", warehouseMaximumSlots(), entry, quantity)) { addLog("大倉庫已滿，無法存放物品。", { channel: "other" }); return false; }
   if (!entry.isEquipment && entry.quantity > quantity) entry.quantity -= quantity; else state.inventory.splice(arrayIndex, 1);
   compactInventory(); compactBigStorage(); render(); renderWarehouse(); if ($("#collection-dialog")?.open) renderCollectionDialog(); persistPlayerSave(); return true;
 }
@@ -3184,7 +3555,7 @@ async function transferBigStorageToInventory(storageIndex) {
   compactBigStorage(); render(); renderWarehouse(); if ($("#collection-dialog")?.open) renderCollectionDialog(); persistPlayerSave(); return true;
 }
 
-function useBigStorageCell(visibleIndex) { return transferBigStorageToInventory(state.bigStoragePage * state.bigStoragePageCapacity + visibleIndex); }
+function useBigStorageCell(storageIndex) { return Number.isInteger(storageIndex) ? transferBigStorageToInventory(storageIndex) : false; }
 
 const COLLECTION_GRID_LAYOUT = ["necklace_1", "earrings_1", "helmet_1", "earrings_2", null, null, "weapon_1", "body_1", "shield_1", null, "ring_1", "ring_2", "kneepads_1", "ring_3", "ring_4", "idol_1", "gloves_1", "shoe_1", "gloves_2", "core_1"];
 
@@ -3268,7 +3639,7 @@ function moveEquipmentToCollection(sourceType, sourceIndex) {
 function removeCollectionEquipment(slot) {
   const collection = currentCollection(); const equipped = collection.equipment[slot]; if (!equipped) return false;
   const item = catalogItem(equipped.itemId);
-  if (firstFreeBigStorageIndex() >= 0) addPortableEntry(state.bigStorage, "storageIndex", BIG_STORAGE_MAX_SLOTS, equipped, 1);
+  if (firstFreeBigStorageIndex() >= 0) addPortableEntry(state.bigStorage, "storageIndex", warehouseMaximumSlots(), equipped, 1);
   else {
     const inventoryIndex = firstFreeInventoryIndex();
     if (inventoryIndex < 0) { showCollectionMessage("倉庫與背包空間不足，無法卸下此裝備。", true); return false; }
@@ -3288,7 +3659,7 @@ function recalculateCollectionLayouts() {
   }
   if (storageGrid?.clientWidth > 0 && storageGrid.clientHeight > 0) {
     const old = Math.max(1, state.collectionStorageCapacity); const anchor = state.collectionStoragePage * old; const metrics = floatingGridMetrics(storageGrid);
-    state.collectionStorageCapacity = metrics.capacity; state.collectionStoragePage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.ceil(BIG_STORAGE_MAX_SLOTS / metrics.capacity) - 1);
+    state.collectionStorageCapacity = metrics.capacity; state.collectionStoragePage = clamp(Math.floor(anchor / metrics.capacity), 0, Math.ceil(warehouseMaximumSlots() / metrics.capacity) - 1);
     applyGridMetrics(storageGrid, metrics); rebuildPortableGrid(storageGrid, metrics.capacity);
   }
   renderCollectionDialog();
@@ -3296,7 +3667,7 @@ function recalculateCollectionLayouts() {
 
 function inventoryPageCountFor(capacity) {
   const highest = state.inventory.reduce((maximum, entry) => Math.max(maximum, Number(entry.inventoryIndex) || 0), -1);
-  return Math.max(1, Math.ceil(Math.min(INVENTORY_MAX_SLOTS, Math.max(capacity, highest + 1 + INVENTORY_RESERVE_SLOTS)) / capacity));
+  return Math.max(1, Math.ceil(Math.min(inventoryMaximumSlots(), Math.max(capacity, highest + 1 + INVENTORY_RESERVE_SLOTS)) / capacity));
 }
 
 function renderCollectionEquipment() {
@@ -3321,7 +3692,7 @@ function renderCollectionDialog() {
   renderGenericPagination($("#collection-inventory-pages"), inventoryPageCountFor(state.collectionInventoryCapacity) * state.collectionInventoryCapacity, state.collectionInventoryCapacity, state.collectionInventoryPage, (page) => { state.collectionInventoryPage = page; renderCollectionDialog(); });
   const storageStart = state.collectionStoragePage * state.collectionStorageCapacity;
   [...$("#collection-storage-grid").children].forEach((cell, visible) => renderPortableEntryCell(cell, portableEntryAt(state.bigStorage, "storageIndex", storageStart + visible), "空白倉庫格"));
-  renderGenericPagination($("#collection-storage-pages"), BIG_STORAGE_MAX_SLOTS, state.collectionStorageCapacity, state.collectionStoragePage, (page) => { state.collectionStoragePage = page; renderCollectionDialog(); });
+  renderGenericPagination($("#collection-storage-pages"), warehouseMaximumSlots(), state.collectionStorageCapacity, state.collectionStoragePage, (page) => { state.collectionStoragePage = page; renderCollectionDialog(); });
 }
 
 function setupShop() {
@@ -5321,12 +5692,14 @@ function renderPartyUnits(container) {
 function renderInventory() {
   const cells = [...$("#inventory-grid").children];
   const start = state.inventoryPage * state.inventoryPageCapacity;
+  const comparisonHero = state.party.find((hero) => hero.slot === state.equipmentCharacter) ?? state.party[0];
   cells.forEach((cell, index) => {
     const item = inventoryEntryAt(start + index);
     const renderSignature = item
       ? JSON.stringify([
         item.key, item.itemUuid, item.itemId, item.name, item.quantity, item.locked,
         item.isEquipment ? normalizeEnhancement(item) : null,
+        item.isEquipment ? [...(comparisonHero?.focusedAttributes ?? [])].sort() : [],
       ])
       : "";
     if (cell.dataset.renderSignature === renderSignature) return;
@@ -5334,7 +5707,7 @@ function renderInventory() {
     cell.textContent = inventoryButtonText(item);
     const source = item ? catalogItem(item.itemId) : null;
     applyEnhancementVisual(cell, item?.isEquipment ? item : null, source);
-    if (item?.isEquipment) assignEquipmentTooltip(cell, source, "點擊裝備", item);
+    if (item?.isEquipment) assignEquipmentTooltip(cell, source, "點擊裝備", item, comparisonHero);
     else {
       assignEquipmentTooltip(cell, null, "", null);
       cell.title = item ? `${itemTooltip(source)}\n數量 ${item.quantity}` : "";

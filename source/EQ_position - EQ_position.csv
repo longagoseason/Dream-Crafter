@@ -1,0 +1,16 @@
+EQ_position,EQ_name,sort
+all,全部,0
+physical_weapon,物理,1
+magic_weapon,魔法,2
+hybrid_weapon,混合,3
+earrings,耳環,4
+ring,戒指,5
+core,核心,6
+idol,神像,7
+necklace,項鍊,8
+helmet,頭盔,9
+body,胸甲,10
+gloves,手套,11
+kneepads,護膝,12
+shoe,鞋子,13
+shield,盾牌,14
