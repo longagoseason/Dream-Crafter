@@ -2811,7 +2811,7 @@ function renderEnhancePanel() {
   const inventoryMode = state.enhanceSource === "inventory";
   $("#enhance-equipped-panel").hidden = inventoryMode;
   $("#enhance-backpack-panel").hidden = !inventoryMode;
-  $("#enhance-backpack-toggle").textContent = inventoryMode ? "穿戴強化" : "背包強化";
+  $("#enhance-backpack-toggle").textContent = inventoryMode ? "裝備強化" : "背包強化";
   if (inventoryMode) renderEnhanceBackpack(hero);
   document.querySelectorAll("#enhance-characters button").forEach((button) => button.classList.toggle("active", button.dataset.character === hero.slot));
   $("#enhance-class").textContent = hero.className;
@@ -3316,7 +3316,7 @@ function delegatedButtonFromEvent(event, container, selector) {
 
 function renderPortableEntryCell(cell, entry, emptyLabel = "空白格", comparisonHero = null) {
   const renderSignature = JSON.stringify(entry
-    ? [entry.source, entry.itemUuid ?? "", entry.itemId ?? "", entry.quantity ?? 0, entry.enhancementLevel ?? 0, entry.enhancementRoll ?? 0,
+    ? [entry.source, entry.itemUuid ?? "", entry.itemId ?? "", entry.quantity ?? 0, entry.isEquipment ? normalizeEnhancement(entry) : null,
       comparisonHero?.classId ?? "", Array.from(comparisonHero?.focusedAttributes ?? []).sort()]
     : ["empty", comparisonHero?.classId ?? "", Array.from(comparisonHero?.focusedAttributes ?? []).sort()]);
   if (cell.dataset.renderSignature === renderSignature) return;

@@ -96,19 +96,19 @@ button:not(:disabled) { cursor:pointer; } button:not(:disabled):hover { backgrou
 .attribute-dialog::backdrop { background:rgba(0,0,0,.78); }
 .dialog-title { height:48px; display:flex; align-items:center; justify-content:space-between; padding-left:16px; border-bottom:1px solid var(--line); }.dialog-title button{height:100%;width:48px;border:0;border-left:1px solid var(--line);font-size:24px}
 .attribute-characters { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid var(--line); }.attribute-characters button{min-width:0;border:0;border-right:1px solid var(--line)}.attribute-characters button:last-child{border-right:0}.attribute-characters button.active{background:#c7c7c7;color:#111;font-weight:700}
-.character-info-dialog { width:min(960px,calc(100vw - 32px)); }
+.character-info-dialog { width:min(872px,calc(100vw - 32px)); }
 .character-info-title { display:flex; align-items:baseline; gap:12px; white-space:nowrap; }
 .character-info-title small { font-size:calc(1em - 2px); font-weight:400; }
-.character-info-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:16px; }
+.character-info-grid { display:grid; grid-template-columns:repeat(3,minmax(0,280px)); justify-content:center; padding:16px; }
 .character-info-cell { min-height:38px; display:flex; align-items:center; gap:8px; min-width:0; padding:8px 10px; border-right:1px solid #454545; border-bottom:1px solid #454545; background:#1b1b1b; font:13px ui-monospace,monospace; white-space:nowrap; }
 .character-info-cell:nth-child(3n) { border-right:0; }
 .character-info-cell.header { min-height:46px; background:#252525; font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif; font-weight:700; }
-.character-info-cell.right { justify-content:flex-end; }
+.character-info-cell.right { justify-content:flex-start; }
 .character-info-cell strong { color:#fff; }
 .character-info-cell span { color:var(--color-mid-character-value); }
 .character-info-cell span.negative-value { color:var(--color-mid-character-neg-value); }
 .character-info-cell input[type="checkbox"] { flex:0 0 auto; width:16px; height:16px; margin:0; cursor:pointer; }
-.character-info-cell.focus-controls { justify-content:center; gap:5px; font-size:12px; }
+.character-info-cell.focus-controls { justify-content:flex-start; gap:5px; font-size:12px; }
 .character-info-cell.focus-controls button { min-width:42px; padding:4px 6px; white-space:nowrap; font-size:11px; }
 #attribute-form { padding:16px; }
 .attribute-plan-table { border:1px solid var(--line); background:#181818; }
