@@ -6,6 +6,8 @@ const INVENTORY_SLOT_SIZE = 60;
 const INVENTORY_SLOT_GAP = 3;
 const INVENTORY_MAX_PAGE_BUTTONS = 10;
 const COLLECTION_PAGE_COUNT = 10;
+const MIN_ACTION_INTERVAL_SECONDS = 1e-6;
+const MAX_ACTIONS_PER_UPDATE = 50;
 const SLOT_PATTERN_BASE = "./assets/slot-patterns/";
 const DEFAULT_MID_FIG_COLOR = "#A0A0A0";
 const DEFAULT_MID_FIG_SIZE = 80;
@@ -48,6 +50,7 @@ const roundSigned = (n) => Math.round(n * 1000000) / 1000000;
 const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const runtimeWarningKeys = new Set();
 let dotInstanceSequence = 0;
+let aspdStatusInstanceSequence = 0;
 
 function aarSarMaximum() {
   const configured = Number(systemSettings()?.AAR_SAR_max);
@@ -260,17 +263,24 @@ const transitionDelay = (milliseconds) => new Promise((resolve) => window.setTim
 
 function updatePauseButton() { if ($("#pause-button")) $("#pause-button").textContent = state.paused ? "繼續" : "暫停"; }
 
+function resetUnitActionProgress(unit) {
+  if (!unit) return;
+  unit.cooldown = 0;
+  unit.actionInterval = null;
+}
+
 function resetCombatRuntimeState() {
   const runtimeUnits = [...(state.roster ?? []), ...(state.enemies ?? [])];
   for (const unit of runtimeUnits) {
     unit.buffs = [];
     unit.casting = null;
     unit.skillCooldowns = {};
-    unit.cooldown = 0;
+    resetUnitActionProgress(unit);
   }
   state.enemies = [];
   state.spawnElapsed = 0;
   dotInstanceSequence = 0;
+  aspdStatusInstanceSequence = 0;
 }
 
 function forceSafeTown() {
@@ -3015,7 +3025,7 @@ function resetHero(classId, now = Date.now()) {
   state.equipmentEditSets[hero.classId] = 1;
   hero.learnedSkillIds = new Set(); hero.skillEnabled = {}; hero.skillCooldowns = {}; hero.itemCooldowns = {};
   hero.skillSettings = {};
-  hero.cooldown = 0; hero.casting = null; hero.buffs = [];
+  resetUnitActionProgress(hero); hero.casting = null; hero.buffs = [];
   assignInitialEquipment(hero, cls); recalculateHeroStats(hero, true); grantBuiltInSkills(hero); grantInitialItemForHero(hero);
   hero.resetAvailableAt = now + 60000;
   addLog(`${hero.name} 已重置為 classes.csv 初始狀態，並重新取得初始裝備與道具。`);
@@ -4180,6 +4190,7 @@ function chooseMap(mapId, townAutoReturn = false) {
   $("#map-select").value = mapId;
   syncMapPicker();
   state.enemies = []; state.spawnElapsed = state.map.spawn_cd;
+  for (const hero of state.roster) resetUnitActionProgress(hero);
   addLog(`進入 ${state.map.name}；這裡有：${mapMonsterNames(mapId).join("、")}`); spawnMonster(); render();
 }
 
@@ -4200,7 +4211,9 @@ function spawnMonster() {
 }
 
 function loop(now) {
-  const dt = Math.min(.25, (now - state.lastTime) / 1000); state.lastTime = now;
+  const elapsedSeconds = (now - state.lastTime) / 1000;
+  const dt = Number.isFinite(elapsedSeconds) && elapsedSeconds > 0 ? elapsedSeconds : 0;
+  state.lastTime = now;
   if (!state.paused) update(dt);
   render(); requestAnimationFrame(loop);
 }
@@ -4237,9 +4250,50 @@ function monsterConfiguredSkills(monsterId) {
     .sort((a, b) => a.use.use_priority - b.use.use_priority || a.use.skill_order - b.use.skill_order);
 }
 
+function safeActionInterval(value, fallback = 1) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) return Math.max(MIN_ACTION_INTERVAL_SECONDS, numeric);
+  const safeFallback = Number(fallback);
+  if (Number.isFinite(safeFallback) && safeFallback > 0) return Math.max(MIN_ACTION_INTERVAL_SECONDS, safeFallback);
+  return 1;
+}
+
+function aspdActionInterval(aspd, baseInterval = 1) {
+  const numericAspd = Number(aspd);
+  const safeAspd = Number.isFinite(numericAspd) ? numericAspd : 0;
+  const safeBaseInterval = safeActionInterval(baseInterval);
+  const modifier = safeAspd >= 0
+    ? 1 / (1 + safeAspd / 100)
+    : 1 + Math.abs(safeAspd) / 100;
+  const interval = safeBaseInterval * modifier;
+  if (interval === Infinity) return Number.MAX_VALUE;
+  return safeActionInterval(interval, safeBaseInterval);
+}
+
+function syncActionInterval(unit, nextInterval) {
+  const next = safeActionInterval(nextInterval);
+  const previous = Number(unit?.actionInterval);
+  const remaining = Number(unit?.cooldown);
+  if (!Number.isFinite(remaining)) unit.cooldown = 0;
+  if (Number.isFinite(previous) && previous > 0 && Number.isFinite(remaining) && remaining > 0 && Math.abs(previous - next) > 1e-12) {
+    const remainingRatio = clamp(remaining / previous, 0, 1);
+    unit.cooldown = next * remainingRatio;
+  }
+  unit.actionInterval = next;
+  return next;
+}
+
+function scheduleNextAction(unit, interval, preserveOverrun = true) {
+  const safeInterval = syncActionInterval(unit, interval);
+  const current = Number.isFinite(Number(unit.cooldown)) ? Number(unit.cooldown) : 0;
+  unit.cooldown = (preserveOverrun ? current : Math.max(0, current)) + safeInterval;
+  return safeInterval;
+}
+
 function monsterActionInterval(enemy) {
-  const attacksPerSecond = Math.max(.05, enemy.attack_speed * (1 + combatStat(enemy, "ASPD") / 100));
-  return 1 / attacksPerSecond;
+  const configuredSpeed = Number(enemy?.attack_speed);
+  const attacksPerSecond = Number.isFinite(configuredSpeed) && configuredSpeed > 0 ? Math.max(.05, configuredSpeed) : .05;
+  return aspdActionInterval(combatStat(enemy, "ASPD"), 1 / attacksPerSecond);
 }
 
 function monsterTriggerTargets(side) {
@@ -4269,24 +4323,36 @@ function monsterSkillTriggerSatisfied(use) {
 }
 
 function updateMonsterAction(enemy, dt) {
-  enemy.cooldown -= dt;
+  syncActionInterval(enemy, monsterActionInterval(enemy));
   for (const skillId of Object.keys(enemy.skillCooldowns ?? {})) enemy.skillCooldowns[skillId] = Math.max(0, enemy.skillCooldowns[skillId] - dt);
   if (updateTimedSkillStatuses(enemy, dt)) return;
+  syncActionInterval(enemy, monsterActionInterval(enemy));
+  enemy.cooldown -= dt;
   if (enemy.casting) {
     enemy.casting.remaining -= dt;
     if (enemy.casting.remaining <= 0) {
       const { skill, skillColor } = enemy.casting; enemy.casting = null;
-      executeMonsterSkill(enemy, skill, skillColor); enemy.cooldown = Math.max(enemy.cooldown, monsterActionInterval(enemy));
+      executeMonsterSkill(enemy, skill, skillColor);
+      scheduleNextAction(enemy, monsterActionInterval(enemy), false);
     }
     return;
   }
-  if (enemy.cooldown > 0) return;
-  const configured = monsterConfiguredSkills(enemy.monster_id)
-    .find(({ use }) => monsterSkillTriggerSatisfied(use) && (enemy.skillCooldowns[use.skill_id] ?? 0) <= 0);
-  if (configured) { startMonsterSkill(enemy, configured); return; }
-  const target = frontParty();
-  if (target) monsterAttack(enemy, target);
-  enemy.cooldown += monsterActionInterval(enemy);
+  let actions = 0;
+  while (enemy.cooldown <= 0 && actions < MAX_ACTIONS_PER_UPDATE) {
+    const configured = monsterConfiguredSkills(enemy.monster_id)
+      .find(({ use }) => monsterSkillTriggerSatisfied(use) && (enemy.skillCooldowns[use.skill_id] ?? 0) <= 0);
+    if (configured) {
+      startMonsterSkill(enemy, configured);
+      actions += 1;
+      if (enemy.casting) break;
+    } else {
+      const target = frontParty();
+      if (target) monsterAttack(enemy, target);
+      scheduleNextAction(enemy, monsterActionInterval(enemy));
+      actions += 1;
+    }
+    if (!frontParty()) break;
+  }
 }
 
 function startMonsterSkill(enemy, configured) {
@@ -4298,7 +4364,7 @@ function startMonsterSkill(enemy, configured) {
     addLog(`${enemy.name} 開始施放 ${skill.name}。`, { channel: "monster", skillName: skill.name, skillColor });
   } else {
     executeMonsterSkill(enemy, skill, skillColor);
-    enemy.cooldown += monsterActionInterval(enemy);
+    scheduleNextAction(enemy, monsterActionInterval(enemy));
   }
 }
 
@@ -4492,8 +4558,12 @@ function addTimedSkillEffect(target, caster, skill, effect, value, skillColor = 
   if (!(seconds > 0) || !value) return false;
   target.buffs ??= [];
   const casterEntityKey = statusCasterEntityKey(caster);
-  const effectKey = `${casterEntityKey}:${skill.skill_id}:${effect.index}`;
-  const existing = target.buffs.find((buff) => buff.effectKey === effectKey);
+  const stackableAspd = effect.stat === "ASPD";
+  const aspdStatusInstanceId = stackableAspd ? ++aspdStatusInstanceSequence : null;
+  const effectKey = stackableAspd
+    ? `${casterEntityKey}:${skill.skill_id}:${effect.index}:aspd:${aspdStatusInstanceId}`
+    : `${casterEntityKey}:${skill.skill_id}:${effect.index}`;
+  const existing = stackableAspd ? null : target.buffs.find((buff) => buff.effectKey === effectKey);
   const next = {
     effectKey, casterEntityKey, casterName: caster.name, sourceName: caster.name,
     skillId: skill.skill_id, skillName: skill.name, name: skill.name,
@@ -4501,6 +4571,7 @@ function addTimedSkillEffect(target, caster, skill, effect, value, skillColor = 
     effectIndex: effect.index, stat: effect.stat, value, effectAmount: value,
     duration: seconds, remaining: seconds,
   };
+  if (aspdStatusInstanceId !== null) next.aspdStatusInstanceId = aspdStatusInstanceId;
   if (existing) Object.assign(existing, next);
   else target.buffs.push(next);
   return true;
@@ -4918,6 +4989,7 @@ function enterTown(automatic = true) {
   state.townAutoReturn = Boolean(automatic);
   state.enemies = [];
   state.spawnElapsed = 0;
+  for (const hero of state.roster) resetUnitActionProgress(hero);
   const select = typeof document === "undefined" ? null : $("#map-select");
   if (select) { select.value = town.map_id; select.disabled = false; }
   syncMapPicker();
@@ -4950,6 +5022,7 @@ function returnFromTown() {
   state.townAutoReturn = false;
   state.enemies = [];
   state.spawnElapsed = destination.spawn_cd;
+  for (const hero of state.roster) resetUnitActionProgress(hero);
   const select = typeof document === "undefined" ? null : $("#map-select");
   if (select) { select.disabled = false; select.value = destination.map_id; }
   syncMapPicker();
@@ -4972,26 +5045,37 @@ function applyRegeneration(actor, dt) {
 }
 
 function updateHeroAction(actor, dt) {
-  actor.cooldown -= dt;
+  syncActionInterval(actor, heroActionInterval(actor));
   for (const skillId of Object.keys(actor.skillCooldowns)) actor.skillCooldowns[skillId] = Math.max(0, actor.skillCooldowns[skillId] - dt);
   if (updateTimedSkillStatuses(actor, dt)) return;
+  syncActionInterval(actor, heroActionInterval(actor));
+  actor.cooldown -= dt;
   if (actor.casting) {
     actor.casting.remaining -= dt;
     if (actor.casting.remaining <= 0) {
       const skill = actor.casting.skill; actor.casting = null;
-      executeHeroSkill(actor, skill); actor.cooldown = Math.max(actor.cooldown, heroActionInterval(actor));
+      executeHeroSkill(actor, skill);
+      scheduleNextAction(actor, heroActionInterval(actor), false);
     }
     return;
   }
-  if (actor.cooldown > 0 || !state.enemies[0]) return;
-  const skill = selectHeroSkill(actor);
-  if (skill) startHeroSkill(actor, skill);
-  else actor.cooldown += .1;
+  if (!state.enemies[0]) return;
+  let actions = 0;
+  while (actor.cooldown <= 0 && state.enemies[0] && actions < MAX_ACTIONS_PER_UPDATE) {
+    const skill = selectHeroSkill(actor);
+    if (skill) {
+      startHeroSkill(actor, skill);
+      actions += 1;
+      if (actor.casting) break;
+    } else {
+      actor.cooldown += .1;
+      break;
+    }
+  }
 }
 
 function heroActionInterval(actor) {
-  const actionsPerSecond = Math.max(.05, 1 + combatStat(actor, "ASPD") / 100);
-  return 1 / actionsPerSecond;
+  return aspdActionInterval(combatStat(actor, "ASPD"));
 }
 
 function selectHeroSkill(actor) {
@@ -5036,7 +5120,8 @@ function startHeroSkill(actor, skill) {
     actor.casting = { skill, remaining: skill.cast_time };
     addLog(`${actor.name} 開始施放 ${skill.name}。`, { channel: "player", skillName: skill.name, skillColor: playerSkillLogColor(skill) });
   } else {
-    executeHeroSkill(actor, skill); actor.cooldown += heroActionInterval(actor);
+    executeHeroSkill(actor, skill);
+    scheduleNextAction(actor, heroActionInterval(actor));
   }
 }
 
@@ -5128,6 +5213,7 @@ function monsterAttack(enemy, target) {
 function clearHeroStatuses(hero) {
   hero.buffs = [];
   hero.casting = null;
+  resetUnitActionProgress(hero);
   recalculateHeroStats(hero);
   hero.hp = 0;
 }
