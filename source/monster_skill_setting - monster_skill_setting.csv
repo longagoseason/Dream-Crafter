@@ -26,7 +26,7 @@ sk022,黑闇降臨,magic,aoe,50,150,0,SAR,enemy_aoe,-15,10,AAR,enemy_aoe,-15,10
 sk023,左右互搏,physical,front,50,200,0,DMG,random,,,,,,
 sk024,希望的微光,magic,none,0,0,1,MR,enemy_aoe,66,10,AC,enemy_aoe,66,10
 sk025,神聖彗星,magic,ALLaoe,77,250,1,HP,ally_aoe,-1314,0,,,,
-sk026,爆炸！,magic,ALLaoe,88,288,2,DOT,DMGchoose,66%,3,DOT,self,25%,3
+sk026,爆炸！,magic,ALLaoe,88,288,2,DOT,DMGchoose,66%,3,,,,
 sk027,為了吾王,buff,none,0,0,0,ATK,ally_aoe,30,10,MATK,ally_aoe,30,10
 sk028,治癒圖騰,buff,none,0,0,0,HPR,ally_aoe,300,5,,,,
 sk029,狂暴血戰,buff,aoe,150,150,0,ADAM,self,100,20,AC,self,-50,20

@@ -190,3 +190,5 @@ version,type,patch_note
 0.3.008,system,現在的ASPD+100，會是每1秒攻擊2次
 0.3.008,system,現在的ASPD -100，會是每2秒攻擊1次
 0.3.008,system,遊戲中的所有角色與技能ASPD邏輯是一樣的
+0.3.009,monster,些微提高Lv.16區域的裝備檢定需求
+0.3.009,monster,些微改變女劍聖的戰鬥方式
