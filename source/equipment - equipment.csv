@@ -66,11 +66,11 @@ eq0156,預見Ｂ 破魔劍,1500,hybrid_weapon,two_hand_weapon,spellblade,magesla
 eq0181,聖劍碎片 希魯達,1500,idol,,all,idol.png,#FFFF00,15,12,12,5,20,3,3,,,,,,,,,,,,,,
 eq0182,祈願 松木法杖,1500,magic_weapon,two_hand_weapon,priest,wand.png,#FFFF00,15,,30,,,,3,,,,,,,50,,,,5,10,,
 eq0183,哥布林 祭祀匕首,1500,physical_weapon,one_hand_weapon,thief,knife.png,#FFFF00,15,25,,5,20,,,,,,,,,,,,,,,,
-eq0184,哥布林 貪慾核心,1500,core,,all,core.png,#FFCCE5,15,,,,,,,-5,-5,,,10,,10,,5,,5,,,30
-eq0185 ,哥布林 薩滿圖騰,1500,shield,,all,shield.png,#FFCCE5,15,5,5,,,,,,,,,,,,0.5,1,,1,,,1
-eq0186,哥布林 偷襲短靴,1500,shoe,,all,shoe.png,#FFCCE5,15,,,,,,,,,5,5,,,,,,,,,8,
-eq0187,哥布林 逃兵護膝,1500,kneepads,,all,kneepads.png,#FFCCE5,15,,,,,,,-10,-10,10,10,,,,,,,,,,5
-eq0188,哥布林 火藥行囊,1500,idol,,all,idol.png,#FFCCE5,15,5,5,,,18,18,-10,-10,-10,-10,,,,,,,,,,
+eq0184,哥布林 貪慾核心,1500,core,,all,core.png,#FF99CC,15,,,,,,,-5,-5,,,10,,10,,5,,5,,,30
+eq0185 ,哥布林 薩滿圖騰,1500,shield,,all,shield.png,#FF99CC,15,5,5,,,,,,,,,,,,0.5,1,,1,,,1
+eq0186,哥布林 偷襲短靴,1500,shoe,,all,shoe.png,#FF99CC,15,,,,,,,,,5,5,,,,,,,,,8,
+eq0187,哥布林 逃兵護膝,1500,kneepads,,all,kneepads.png,#FF99CC,15,,,,,,,-10,-10,10,10,,,,,,,,,,5
+eq0188,哥布林 火藥行囊,1500,idol,,all,idol.png,#FF99CC,15,5,5,,,18,18,-10,-10,-10,-10,,,,,,,,,,
 eq0201,Ｂ 胸甲,2000,body,,all,body.png,#A0A0A0,20,,,,,,,10,10,,,,,,,,,,,,
 eq0202,Ｂ 頭盔,2000,helmet,,all,helmet.png,#A0A0A0,20,,,,,,,10,10,,,,,,,,,,,,
 eq0203,Ｂ 盾牌,2000,shield,,all,shield.png,#A0A0A0,20,,,,,,,10,10,,,,,,,,,,,,
@@ -103,17 +103,17 @@ eq0254,預見Ｃ 魔法球,2500,magic_weapon,two_hand_weapon,mage,magicball.png,
 eq0255,預見Ｃ 匕首,2500,physical_weapon,one_hand_weapon,thief,knife.png,#99FF99,25,30,,3,30,,,,,,,,,,,,,,,5,5
 eq0256,預見Ｃ 破魔劍,2500,hybrid_weapon,two_hand_weapon,spellblade,mageslayer.png,#99FF99,25,23,23,1,,5,5,,,,,,,,,5,,5,,,
 eq0281,魯米娜斯 信仰,2500,idol,,all,idol.png,#FFFF00,25,12,12,5,30,5,5,,,,,,,,,,,,,,
-eq0282,骷髏王 紫金骷髏,3000,magic_weapon,two_hand_weapon,priest,wand.png,#E5CCFF,30,,25,5,,,,,,,,,,50,,,,15,5,5,5
-eq0283,巫妖王 影之哀傷,3000,hybrid_weapon,two_hand_weapon,warrior|spellblade,mageslayer.png,#E5CCFF,30,25,25,5,30,2,2,,,,,,,,,15,5,,,5,5
-eq0284,殭屍王 屍鬼封禁,3000,body,,all,body.png,#E5CCFF,30,,,,,,,30,30,,,50,20,50,5,2,10,2,10,3,3
+eq0282,骷髏王 紫金骷髏,3000,magic_weapon,two_hand_weapon,priest,magic_wand.png,#FF99FF,30,,25,5,,,,,,,,,,50,,,,15,5,5,5
+eq0283,巫妖王 影之哀傷,3000,hybrid_weapon,two_hand_weapon,warrior|spellblade,mageslayer.png,#FF99FF,30,25,25,5,30,2,2,,,,,,,,,15,5,,,5,5
+eq0284,殭屍王 屍鬼封禁,3000,body,,all,body.png,#FF99FF,30,,,,,,,30,30,,,50,20,50,5,2,10,2,10,3,3
 eq0285,玷污的 靈魂核心,2500,core,,all,core.png,#000000,25,,,,,,,-5,-5,,,10,,10,,5,,5,,,30
 eq0286,古洛斯 耳環,2500,earrings,,all,earrings.png,#FFFF00,25,,,,,,,,,,,,6,,1.5,,,,,,
-eq0287,防腐官 裹屍手套,2500,gloves,,all,gloves.png,#E5CCFF,25,,,,,,,8,8,,,,-10,,-0.5,,,,,,
-eq0288,縛地靈 跪的容易,2500,kneepads,,all,kneepads.png,#E5CCFF,25,,,,,-5,-5,8,8,4,4,,,,,,,,,,
+eq0287,防腐官 裹屍手套,2500,gloves,,all,gloves.png,#FF99FF,25,,,,,,,8,8,,,,-10,,-0.5,,,,,,
+eq0288,縛地靈 跪的容易,2500,kneepads,,all,kneepads.png,#FF99FF,25,,,,,-5,-5,8,8,4,4,,,,,,,,,,
 eq0289,怨靈 水晶戒,2500,ring,,all,ring.png,#000000,25,,,,,,,-5,-5,-8,-8,,,,,8,5,8,5,5,5
 eq0290,縫合怪 腐敗巨劍,2500,hybrid_weapon,two_hand_weapon,spellblade,mageslayer.png,#000000,25,44,44,4,44,-12,-12,,,,,,,,,22,-11,22,-11,,-22
-eq0291,腐敗修女 思念,2500,necklace,,all,necklace.png,#E5CCFF,25,,,,,4,4,,,,,,,,,,,,8,,
-eq0292,純淨的 靈魂核心,2500,core,,all,core.png,#E5CCFF,25,,,,,,,5,5,,,300,1,50,1,,5,,5,,
+eq0291,腐敗修女 思念,2500,necklace,,all,necklace.png,#FF99FF,25,,,,,4,4,,,,,,,,,,,,8,,
+eq0292,純淨的 靈魂核心,2500,core,,all,core.png,#FF99FF,25,,,,,,,5,5,,,300,1,50,1,,5,,5,,
 eq0293,盜墓者 貪婪戒環,2500,ring,,all,ring.png,#000000,25,,,,,,,,,,,,,,,-8,-8,-8,-8,-8,50
 eq0301,Ｃ 胸甲,2000,body,,all,body.png,#A0A0A0,30,,,,,,,15,15,,,,,,,,,,,,
 eq0302,Ｃ 頭盔,2000,helmet,,all,helmet.png,#A0A0A0,30,,,,,,,15,15,,,,,,,,,,,,

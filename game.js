@@ -3080,7 +3080,7 @@ function learnSkill(hero, skillId) {
 function ensureSkillSetting(hero, skill) {
   const current = hero.skillSettings[skill.skill_id] ?? (hero.skillSettings[skill.skill_id] = {});
   const legacyTriggerValue = current.triggerValue;
-  const defaultTrigger = skill.damage_type === "heal" ? 30 : (skill.trigger_value ?? 100);
+  const defaultTrigger = skill.trigger_value ?? (skill.damage_type === "heal" ? 30 : 100);
   current.triggerValue = normalizedTriggerPercentage(current.triggerValue, defaultTrigger);
   current.triggerHpValue = normalizedTriggerPercentage(current.triggerHpValue, legacyTriggerValue ?? skill.trigger_value ?? 50);
   current.triggerMpValue = normalizedTriggerPercentage(current.triggerMpValue, legacyTriggerValue ?? skill.trigger_value ?? 50);
@@ -3097,10 +3097,18 @@ function normalizedTriggerPercentage(value, fallback) {
 }
 
 const PLAYER_TRIGGER_PATTERN = /^(ally|enemy)_(hp|mp)_(below|above)$/i;
+const SELF_RESOURCE_TRIGGER_PATTERN = /^self_(hp)_(below|above)$/i;
 const SELF_DUAL_TRIGGER_PATTERN = /^self_hp_(below|above)_mp_(below|above)$/i;
 
 function effectivePlayerTriggerType(skill) {
-  return String(skill.trigger_type ?? (skill.damage_type === "heal" ? "ally_hp_below" : "")).trim().toLowerCase();
+  const fallback = skill.damage_type === "heal"
+    ? (skill.damage_target === "self" ? "self_hp_below" : "ally_hp_below")
+    : "";
+  const triggerType = String(skill.trigger_type ?? fallback).trim().toLowerCase();
+  const selfHealAllyHp = skill.damage_type === "heal" && skill.damage_target === "self"
+    ? triggerType.match(/^ally_hp_(below|above)$/)
+    : null;
+  return selfHealAllyHp ? `self_hp_${selfHealAllyHp[1]}` : triggerType;
 }
 
 function triggerComparisonMatches(ratio, comparison, threshold) {
@@ -3170,6 +3178,7 @@ function createSkillRow(skill, learned, enabled, hero = null) {
   }
   const playerTriggerType = effectivePlayerTriggerType(skill);
   const standardTrigger = playerTriggerType.match(PLAYER_TRIGGER_PATTERN);
+  const selfResourceTrigger = playerTriggerType.match(SELF_RESOURCE_TRIGGER_PATTERN);
   const selfDualTrigger = playerTriggerType.match(SELF_DUAL_TRIGGER_PATTERN);
   if (hero && standardTrigger) {
     const setting = ensureSkillSetting(hero, skill);
@@ -3192,6 +3201,16 @@ function createSkillRow(skill, learned, enabled, hero = null) {
     countInput.addEventListener("change", () => { setting.minTargets = clamp(Math.trunc(Number(countInput.value) || 1), 1, 3); countInput.value = setting.minTargets; persistPlayerSave(); });
     countLabel.append(countInput); controls.append(countSeparator, countLabel);
     mainline.append(controls);
+  } else if (hero && selfResourceTrigger) {
+    const setting = ensureSkillSetting(hero, skill);
+    const [, resource, comparison] = selfResourceTrigger;
+    const controls = document.createElement("span"); controls.className = "skill-trigger-controls skill-hp-controls";
+    const separator = document.createElement("span"); separator.className = "skill-separator"; separator.textContent = "|";
+    const label = document.createElement("label"); label.textContent = `自身${resource.toUpperCase()}${comparison === "above" ? "≥" : "≤"}`;
+    const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.max = "100"; input.step = "1"; input.value = setting.triggerValue;
+    input.setAttribute("aria-label", `${skill.name} 自身 ${resource.toUpperCase()} 觸發百分比`);
+    input.addEventListener("change", () => { setting.triggerValue = normalizedTriggerPercentage(input.value, setting.triggerValue); input.value = setting.triggerValue; persistPlayerSave(); });
+    label.append(input, "%"); controls.append(separator, label); mainline.append(controls);
   } else if (hero && selfDualTrigger) {
     const setting = ensureSkillSetting(hero, skill);
     const [, hpComparison, mpComparison] = selfDualTrigger;
@@ -4556,6 +4575,10 @@ function baseAttributeValue(target, stat) {
 function configuredEffectAmount(caster, skill, effect, target, context = {}) {
   const parsed = scaledConfiguredEffectValue(caster, skill, effect);
   if (!parsed.percentage) return roundSigned(parsed.value);
+  if (skill.damage_type === "heal" && effect.stat === "HP") {
+    const healReferenceAmount = Math.max(0, Number(context.mainHealReferenceAmount) || 0);
+    return roundSigned(healReferenceAmount * parsed.value / 100);
+  }
   if (effect.stat === "HP") return roundSigned(Math.max(0, Number(target.maxHp) || 0) * parsed.value / 100);
   if (effect.stat === "MP") return roundSigned(Math.max(0, Number(target.maxMp) || 0) * parsed.value / 100);
   const base = baseAttributeValue(target, effect.stat);
@@ -4736,6 +4759,7 @@ function executeMonsterSkill(enemy, skill, skillColor) {
   const opponents = monsterOpponentFormation();
   const mainTargets = resolveSkillTargetSet(enemy, skill.damage_target, allies, opponents);
   let mainDamageTotal = 0;
+  let mainHealReferenceAmount = 0;
   const mainDamageByTarget = new Map(mainTargets.map((target) => [target, 0]));
   const mainEvadedByTarget = new Map(mainTargets.map((target) => [target, false]));
   if (["physical", "magic", "hybrid"].includes(skill.damage_type)) {
@@ -4750,13 +4774,16 @@ function executeMonsterSkill(enemy, skill, skillColor) {
     }
   }
   if (skill.damage_type === "heal") {
+    const mainHealAmounts = [];
     for (const target of mainTargets.length ? mainTargets : [enemy]) {
       const result = calculateHeal(enemy, skill.base_damage, skill.multiplier / 100);
+      mainHealAmounts.push(Math.max(0, Number(result.amount) || 0));
       const recovery = applyRecoveryAmount(target, "HP", result.amount);
       logSkillRecovery(enemy, skill, target, recovery, { channel: "monster", skillColor }, result.critical.isCritical);
     }
+    mainHealReferenceAmount = Math.max(0, ...mainHealAmounts);
   }
-  applyConfiguredSkillEffects(enemy, skill, { channel: "monster", skillColor, allies, opponents, mainTargets, mainDamageTotal, mainDamageByTarget, mainEvadedByTarget, baseDamage: skill.base_damage });
+  applyConfiguredSkillEffects(enemy, skill, { channel: "monster", skillColor, allies, opponents, mainTargets, mainDamageTotal, mainDamageByTarget, mainEvadedByTarget, baseDamage: skill.base_damage, mainHealReferenceAmount });
 }
 
 function monsterEffectTargets(enemy, targetType) {
@@ -5107,6 +5134,11 @@ function skillTriggerMet(actor, skill) {
   const setting = ensureSkillSetting(actor, skill);
   if (["aoe", "enemy_aoe", "ALLaoe"].includes(skill.damage_target) && state.enemies.filter((enemy) => enemy.hp > 0).length < setting.enemyCountThreshold) return false;
   const triggerType = effectivePlayerTriggerType(skill);
+  const selfResourceTrigger = triggerType.match(SELF_RESOURCE_TRIGGER_PATTERN);
+  if (selfResourceTrigger) {
+    const ratio = resourceRatio(actor, selfResourceTrigger[1].toUpperCase());
+    return ratio !== null && triggerComparisonMatches(ratio, selfResourceTrigger[2], setting.triggerValue);
+  }
   const selfDualTrigger = triggerType.match(SELF_DUAL_TRIGGER_PATTERN);
   if (selfDualTrigger) {
     const hpRatio = resourceRatio(actor, "HP");
@@ -5171,14 +5203,16 @@ function executeDamageSkill(actor, skill) {
 
 function executeHealSkill(actor, skill) {
   const mainTargets = skillTargets(actor, skill);
+  const mainHealAmounts = [];
   for (const target of mainTargets) {
     const result = calculateHeal(actor, skill.base_damage, skill.multiplier / 100);
+    mainHealAmounts.push(Math.max(0, Number(result.amount) || 0));
     const skillColor = playerSkillLogColor(skill);
     const recovery = applyRecoveryAmount(target, "HP", result.amount);
     logSkillRecovery(actor, skill, target, recovery, { channel: "player", skillColor }, result.critical.isCritical);
   }
   applyConfiguredSkillEffects(actor, skill, { channel: "player", skillColor: playerSkillLogColor(skill), allies: livingParty(), opponents: state.enemies.filter((target) => target.hp > 0), mainTargets,
-    baseDamage: Number(skill.base_damage || 0) });
+    baseDamage: Number(skill.base_damage || 0), mainHealReferenceAmount: Math.max(0, ...mainHealAmounts) });
 }
 
 function executeBuffSkill(actor, skill) {
