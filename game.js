@@ -1139,11 +1139,26 @@ function equipmentInstanceStats(item, instance) {
 function equipmentComparisonSlots(item, hero) {
   if (!hero) return [];
   const resolved = resolvedEquipmentForSet(hero);
+  const emptyStats = () => Object.fromEntries([...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS].map((key) => [key, 0]));
+  const comparisonSlot = (key, predicate = () => true) => {
+    const equipped = resolved[key]?.instance ?? null;
+    const equippedItem = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
+    return { key, stats: equippedItem && predicate(equippedItem) ? equipmentInstanceStats(equippedItem, equipped) : emptyStats() };
+  };
+  if (isWeaponEquipment(item)) {
+    const slots = [comparisonSlot("weapon_1", isWeaponEquipment)];
+    const offhand = resolved.shield_1?.instance ?? null;
+    const offhandItem = offhand ? state.data.equipment.find((candidate) => candidate.item_id === offhand.itemId) : null;
+    if (isDualWieldingEquipment(item) && isDualWieldingEquipment(offhandItem)) {
+      slots.push(comparisonSlot("shield_1", isDualWieldingEquipment));
+    }
+    return slots;
+  }
   return compatibleEquipmentSlots(item).map((slot) => {
     const equipped = resolved[slot.key]?.instance ?? null;
     const equippedItem = equipped ? state.data.equipment.find((candidate) => candidate.item_id === equipped.itemId) : null;
     const matchingItem = equippedItem?.EQ_position === item.EQ_position ? equippedItem : null;
-    return { key: slot.key, stats: matchingItem ? equipmentInstanceStats(matchingItem, equipped) : Object.fromEntries([...DERIVED_STAT_KEYS, ...ATTRIBUTE_KEYS].map((key) => [key, 0])) };
+    return { key: slot.key, stats: matchingItem ? equipmentInstanceStats(matchingItem, equipped) : emptyStats() };
   });
 }
 
