@@ -8,7 +8,7 @@ warrior,戰士的自我修養 Lv.11,csk105,11,50,300,#FFFF00,buff,none,0,0,0,TRU
 warrior,十字斬,csk106,13,15,0,#CC6600,physical,front,13,100,0,TRUE,DMG,front,,,,,,,,,,,TRUE,68,,,,
 warrior,以牙還牙,csk107,15,50,30,#FFFF00,buff,none,0,0,0,TRUE,PReflect,self,100%,20,STR,0.1,HReflect,self,100%,20,,,TRUE,38,,,,[反射] | [成長]
 warrior,流星劍,csk108,18,20,5,#CC6600,physical,front,18,100,0,TRUE,ASPD,self,300,1,,,,,,,,,TRUE,97,,,,[犧牲] | 蠻三刀
-warrior,不屈意志,csk109,23,50,60,#FFFF00,buff,none,0,0,0,TRUE,HPR,self,50,60,CON,0.1,AAR,self,5,60,CON,0.1,TRUE,37,,,,[成長] | [buff]
+warrior,不屈意志,csk109,23,50,60,#FFFF00,heal,self,666,100,0,TRUE,HP,self,100%,0,CON,0.5,AAR,self,5,60,CON,0.1,TRUE,37,self_hp_below,50,,[成長] | [self heal] | [buff]
 warrior,蒼龍破,csk110,27,35,0,#CC6600,physical,aoe,27,110,0,TRUE,,,,,,,,,,,,,TRUE,96,,,,
 warrior,戰士的自我修養 Lv.31,csk111,31,100,300,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,10,60,STR,0.2,ATK,self,5,60,STR,0.2,TRUE,9,,,,[成長] | [buff]
 mage,魔法彈,csk200,1,0,0,#FFFFFF,magic,front,0,100,0,FALSE,,,,,,,,,,,,,TRUE,100,,,,
@@ -19,7 +19,7 @@ mage,寒冰之槍,csk204,8,24,0,#00FFFF,magic,front,16,160,0,TRUE,,,,,,,,,,,,,TR
 mage,法師的自我修養 Lv.11,csk205,11,50,300,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,5,60,INT,0.1,MATK,self,1,60,INT,0.1,TRUE,10,,,,[成長] | [buff]
 mage,冰牢,csk206,13,36,5,#00FFFF,magic,front,13,190,0,TRUE,ASPD,front,-40,20,,,,,,,,,TRUE,97,,,,[debuff] | 冰緩前方敵人
 mage,魔法護盾,csk207,15,100,60,#FFFF00,buff,none,0,0,0,TRUE,MR,self,5,20,WIS,0.1,AC,self,5,20,CON,0.1,TRUE,38,,,,[成長]
-mage,落雷,csk208,18,36,0,#00FFFF,magic,random,36,150,0,TRUE,DMG,random,80%,,,,DMG,random,60%,,,,TRUE,96,,,,
+mage,落雷,csk208,18,36,0,#00FFFF,magic,random,36,100,0,TRUE,DMG,random,66%,,,,DMG,random,33%,,,,TRUE,96,,,,
 mage,奧術空想,csk209,23,48,5,#00FFFF,magic,aoe,23,90,0,TRUE,ASPD,enemy_aoe,-40,20,,,,,,,,,TRUE,68,,,,[debuff] | 冰緩所有敵人
 mage,連鎖閃電,csk210,27,48,0,#00FFFF,magic,aoe,27,100,0,TRUE,,,,,,,,,,,,,TRUE,67,,,,
 mage,法師的自我修養 Lv.31,csk211,31,100,300,#FFFF00,buff,none,0,0,0,TRUE,MDAM,self,10,60,INT,0.2,MATK,self,5,60,INT,0.2,TRUE,9,,,,[成長] | [buff]
@@ -47,6 +47,9 @@ priest,生命逆行,csk408,11,25,0,#00FFFF,magic,random,12,111,0,TRUE,DOT,DMGcho
 priest,聖光追蹤彈,csk409,15,30,0,#00FFFF,magic,aoe,15,88,0,TRUE,DMG,random,,,WIS,0.1,DMG,random,,,WIS,0.1,TRUE,80,,,,[成長] 聖靈召喚(假)
 priest,高級治癒術,csk410,18,75,0,#00FF00,heal,ally_hpless,60,125,0,TRUE,,,,,,,,,,,,,TRUE,38,ally_hp_below,50,,[heal]
 priest,聖十字懲戒,csk411,25,50,5,#00FFFF,magic,front,25,160,0,TRUE,MR,DMGchoose,-50,5,,,,,,,,,TRUE,98,,,,
+priest,群體治癒術,csk497,90,500,5,#00FF00,heal,ally_aoe,0,75,0,FALSE,,,,,,,,,,,,,TRUE,38,ally_hp_below,50,2,[heal]
+priest,治癒迴響,csk498,90,500,5,#00FF00,heal,ally_hpless,100,100,0,FALSE,HP,self,44%,0,CON,0.1,,,,,,,TRUE,37,ally_hp_below,50,,[heal] | 會以一定的治癒量恢復自己
+priest,治療鏈,csk499,90,500,5,#00FF00,heal,ally_hpless,60,125,0,FALSE,HP,HPlower,50%,0,WIS,0.1,HP,HPlower,40%,0,WIS,0.1,TRUE,36,ally_hp_below,50,,[heal] | [成長] | 智能連鎖
 thief,攻擊,csk500,1,0,0,#FFFFFF,physical,front,0,100,0,FALSE,,,,,,,,,,,,,TRUE,100,,,,
 thief,刺擊,csk501,1,5,0,#CC6600,physical,front,1,120,0,TRUE,,,,,,,,,,,,,TRUE,90,,,,
 thief,暗影之道,csk502,3,30,60,#FFFF00,buff,none,0,0,0,TRUE,CRI,self,5,60,DEX,0.5,,,,,,,TRUE,39,,,,[成長] | [buff]
