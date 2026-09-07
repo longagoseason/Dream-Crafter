@@ -68,7 +68,7 @@ spellblade,魔劍之道,csk602,3,1,60,#FFFF00,buff,none,0,0,0,TRUE,MATK,self,1,6
 spellblade,注魔氣刃斬,csk603,5,25,0,#BF55EC,hybrid,aoe,5,100,0,TRUE,,,,,,,,,,,,,TRUE,69,,,,[犧牲] | [成長] | [buff]
 spellblade,冥月斬,csk604,8,16,0,#BF55EC,hybrid,front,8,140,0,TRUE,,,,,,,,,,,,,TRUE,98,,,,
 spellblade,芙蕾雅的信仰,csk605,11,100,60,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,1,60,STR,0.1,MDAM,self,1,60,INT,0.1,TRUE,10,,,,[成長] | [buff]
-spellblade,反手破魔劍,csk606,13,50,5,#BF55EC,hybrid,aoe,13,80,0,TRUE,Counter,DMGchoose,166%,5,,,MR,DMGchoose,-20,5,,,TRUE,68,,,,[反擊]
+spellblade,反手破魔劍,csk606,13,50,5,#BF55EC,hybrid,aoe,13,80,0,TRUE,Counter,DMGchoose,333%,5,,,MR,DMGchoose,-20,5,,,TRUE,68,,,,[反擊]
 spellblade,血劍之道,csk607,15,1,60,#FFFF00,buff,none,0,0,0,TRUE,ATK,self,1,60,STR,0.2,HPR,self,-1,60,STR,0.2,TRUE,38,,,,[犧牲] | [成長] | [buff]
 spellblade,悖魔鋒刃,csk608,18,24,0,#BF55EC,hybrid,front,18,160,0,TRUE,,,,,,,,,,,,,TRUE,97,,,,
 spellblade,提爾的信仰,csk609,21,100,60,#FFFF00,buff,none,0,0,0,TRUE,ADAM,self,1,60,STR,0.1,MDAM,self,1,60,INT,0.1,TRUE,9,,,,[成長] | [buff]
